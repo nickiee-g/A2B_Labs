@@ -1,0 +1,18 @@
+# Environment & API keys
+.env
+.env.*
+*API-Key*.txt
+*Gemini-Key*.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS & Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel
+.vercel/

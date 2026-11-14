@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Plain-English explanation of how A2B Labs handles your code and tests."/>
+  <title>Privacy — A2B Labs</title>
+  <script src="theme.js?v=angstrom-4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-4"/>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="ang-header">
+    <div class="ang-header-inner">
+      <a href="/" class="ang-brand" aria-label="A2B Labs home">
+        <div class="ang-brand-top">
+          <span class="ang-brand-dot"></span>
+          <span>A2B Labs</span>
+        </div>
+        <span class="ang-brand-sub">Clear Code Modernization</span>
+      </a>
+
+      <nav class="ang-nav" aria-label="Main navigation">
+        <a href="/">Home</a>
+        <a href="/workspace.html">Workspace</a>
+        <a href="/how-it-works.html">How It Works</a>
+        <a href="/features.html">Features</a>
+        <a href="/examples.html">Examples</a>
+        <a href="/privacy.html" aria-current="page">Privacy</a>
+      </nav>
+
+      <div class="ang-header-tools">
+        <div class="ang-status-pill">
+          <span class="ang-pulse-wrap"><span class="ang-pulse-ring"></span><span class="ang-pulse-core"></span></span>
+          <span data-live-engine>AI Ready</span>
+        </div>
+        <button class="ang-tool-btn" type="button" data-theme-toggle>☀ Light mode</button>
+        <a class="ang-ws-launch-btn" href="/workspace.html">
+          <span>Open Workspace</span>
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="ang-info-page">
+    <div class="ang-scanline-track" aria-hidden="true">
+      <div class="ang-scanline-beam" id="telemetry-beam"></div>
+    </div>
+    <div class="ang-ambient-matrix" aria-hidden="true"></div>
+
+    <div class="ang-info-container">
+      <div class="ang-section-head">
+        <div class="ang-eyebrow-ribbon">
+          <span class="ang-eyebrow-bar"></span>
+          <span>Your Data, Explained Simply</span>
+        </div>
+        <h1>Know exactly how your<br/>code is handled.</h1>
+        <p>We believe in straightforward answers. Here is what happens behind the scenes when you use this prototype today—and what is planned next.</p>
+      </div>
+
+      <div class="ang-info-grid-3">
+        <article class="reticle-card ang-info-card">
+          <span class="ang-step-num">1 · AI Translation</span>
+          <h3>Connected AI reads your inputs</h3>
+          <p>When you click to find rules or create updated code using live AI, the code and policy text you entered are sent to the connected AI service (Google Gemini or OpenAI) to generate the response. Use "Quick preview" if you want to explore the examples offline.</p>
+        </article>
+
+        <article class="reticle-card ang-info-card">
+          <span class="ang-step-num">2 · Safe Testing</span>
+          <h3>Tests run in an isolated box</h3>
+          <p>When you run the Banking or Retail test cases in Step 3, the updated code runs inside a temporary, locked-down test container with internet access turned off—checking the specific scenarios shown on screen, then deleting itself immediately.</p>
+        </article>
+
+        <article class="reticle-card ang-info-card">
+          <span class="ang-step-num">3 · What to Upload</span>
+          <h3>Use sample or non-sensitive code</h3>
+          <p>Private, company-hosted deployments and team access controls are part of our future roadmap. For this prototype, stick to our built-in examples or non-confidential code snippets.</p>
+        </article>
+      </div>
+
+      <div class="ang-info-cta-row">
+        <a class="ang-btn-primary" href="/workspace.html">
+          <span>Open Workspace</span>
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </a>
+        <a class="ang-btn-secondary" href="/">
+          <span>Back to Home</span>
+        </a>
+      </div>
+    </div>
+
+    <footer class="ang-footer">
+      <div class="ang-footer-left">
+        <span class="ang-brand-dot"></span>
+        <span>Clear, honest privacy boundaries</span>
+      </div>
+      <div class="ang-footer-right">
+        <span>Submitted code is never saved to a database</span>
+      </div>
+    </footer>
+  </main>
+
+  <script src="macro-bench.js?v=angstrom-4"></script>
+</body>
+</html>

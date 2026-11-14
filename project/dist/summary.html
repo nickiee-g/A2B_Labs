@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Test &amp; Summary Report (Step 4) — A2B Labs</title>
+  <script src="theme.js?v=angstrom-6"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Space+Mono&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="code-colors.css?v=angstrom-6"/>
+  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-6"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-6"/>
+</head>
+<body class="workspace-page summary-page">
+  <!-- Clean Step-by-Step Guide & Banking File Queue Sidebar -->
+  <aside class="ang-sidebar" id="workspace-sidebar" aria-label="Workspace navigation">
+    <div>
+      <div class="ang-sidebar-head">
+        <a href="/" class="ang-brand" aria-label="A2B Labs home">
+          <div class="ang-brand-top">
+            <span class="ang-brand-dot"></span>
+            <span>A2B Labs</span>
+          </div>
+          <span class="ang-brand-sub">Test &amp; Summary Report</span>
+        </a>
+        <button class="ang-sidebar-close sidebar-close" type="button" aria-label="Close sidebar">✕</button>
+      </div>
+
+      <!-- Sidebar Banking File Queue -->
+      <div class="sidebar-queue-section" aria-label="Banking file queue">
+        <div class="queue-head-row">
+          <span class="queue-head-title">
+            <span>Banking Queue</span>
+            <span class="queue-count-pill" id="queue-count-pill">1</span>
+          </span>
+          <a class="queue-add-btn" href="/#home-step1-content" title="Add or generate banking code on Home">+ Add / AI Bug</a>
+        </div>
+        <div class="sidebar-queue-list" id="sidebar-queue-list" role="list" aria-label="Queued banking files"></div>
+      </div>
+
+      <div class="ang-rail-label">Workflow Steps</div>
+      <nav class="ang-side-steps" aria-label="Review progress">
+        <a class="ang-side-step done" id="sum-step-0" href="/#home-step1-content">
+          <span class="step-num">✓</span>
+          <span>Add code &amp; policy<small>On Homescreen (Step 1)</small></span>
+        </a>
+        <a class="ang-side-step" id="sum-step-1" href="/workspace.html#step-1">
+          <span class="step-num">2</span>
+          <span>Review business rules<small>Keep, edit, or drop</small></span>
+        </a>
+        <a class="ang-side-step" id="sum-step-2" href="/workspace.html#step-2">
+          <span class="step-num">3</span>
+          <span>Old vs. New Code<small>Side-by-side &amp; Change IDs</small></span>
+        </a>
+        <a class="ang-side-step active" id="sidebar-summary-step" href="/summary.html" aria-current="page">
+          <span class="step-num">4</span>
+          <span>Test &amp; Savings Report<small id="sidebar-summary-sub">Run banking tests &amp; ROI</small></span>
+        </a>
+      </nav>
+
+      <div class="ang-rail-label">Pages</div>
+      <nav class="ang-side-links" aria-label="Site navigation">
+        <a class="ang-side-link" href="/"><span class="material-symbols-outlined">home</span>Step 1: Home</a>
+        <a class="ang-side-link" href="/workspace.html"><span class="material-symbols-outlined">terminal</span>Workspace (Steps 2–3)</a>
+        <a class="ang-side-link" href="/how-it-works.html"><span class="material-symbols-outlined">help</span>How It Works</a>
+        <a class="ang-side-link" href="/features.html"><span class="material-symbols-outlined">star</span>Features</a>
+        <a class="ang-side-link" href="/examples.html"><span class="material-symbols-outlined">folder_open</span>Banking Cases</a>
+        <a class="ang-side-link" href="/privacy.html"><span class="material-symbols-outlined">shield_lock</span>Privacy</a>
+      </nav>
+    </div>
+
+    <div class="ang-sidebar-foot">
+      <div class="ang-sensor-box">
+        <div class="ang-sensor-row">
+          <span>Active file</span>
+          <b id="rail-working-file">fee_waiver.cbl</b>
+        </div>
+        <div class="ang-sensor-row">
+          <span>Report status</span>
+          <b id="rail-gate-stat">Checking…</b>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Summary Area -->
+  <div class="ang-ws-shell">
+    <header class="ang-ws-topbar">
+      <div class="ang-topbar-left">
+        <button id="sidebar-toggle" class="ang-tool-btn" type="button" aria-controls="workspace-sidebar" aria-expanded="true" title="Hide sidebar">
+          <span aria-hidden="true">☰</span>
+          <span class="sidebar-toggle-label">Hide sidebar</span>
+        </button>
+        <nav class="ang-bus-trail" aria-label="Breadcrumb">
+          <a href="/">Step 1: Home</a>
+          <span class="sep">/</span>
+          <a href="/workspace.html">Workspace (Steps 2–3)</a>
+          <span class="sep">/</span>
+          <span id="trail-example">fee_waiver.cbl</span>
+          <span class="sep">/</span>
+          <span id="trail-current" class="curr">Step 4: Test &amp; Savings Report</span>
+        </nav>
+      </div>
+
+      <div class="ang-topbar-right">
+        <span class="ang-connection-pill" id="connection"><i></i>Checking AI…</span>
+        <a class="ang-tool-btn" href="/workspace.html">← Back to Workspace (Steps 2–3)</a>
+        <button class="ang-tool-btn" type="button" data-theme-toggle>☀ Light mode</button>
+      </div>
+    </header>
+
+    <main class="ang-ws-main">
+      <div class="ang-scanline-track" aria-hidden="true">
+        <div class="ang-scanline-beam" id="telemetry-beam"></div>
+      </div>
+
+      <div class="ang-ambient-matrix" aria-hidden="true"></div>
+
+      <!-- Ordered Summary Stream: 1. Test Updated Code -> 2. What Changed & Executive Summary -> 3. Estimated Time & Cost Saved -->
+      <div class="cockpit-wrap">
+        <div id="summary-content" aria-live="polite"></div>
+      </div>
+    </main>
+
+    <footer class="ang-footer">
+      <div class="ang-footer-left">
+        <span class="ang-brand-dot"></span>
+        <span>1. Run real-world banking scenario tests · 2. Review Change ID summary · 3. Unlock Time &amp; Cost Savings</span>
+      </div>
+      <div class="ang-footer-right">
+        <span>A2B Labs Test &amp; Summary Report</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="sidebar.js?v=angstrom-6"></script>
+  <script src="fixtures.js?v=angstrom-6"></script>
+  <script src="code-colors.js?v=angstrom-6"></script>
+  <script src="app.js?v=angstrom-6"></script>
+  <script src="macro-bench.js?v=angstrom-6"></script>
+</body>
+</html>

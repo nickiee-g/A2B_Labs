@@ -1,0 +1,103 @@
+/* Contrast-first editor palettes for Angstrom Obsidian (dark) & Cleanroom Stone (light) */
+:root,
+:root[data-theme="dark"] {
+  --code-bg: #0b0b0e;
+  --code-chrome: #16161b;
+  --code-text: #e5e1e8;
+  --code-keyword: #ffb347;
+  --code-string: #86efac;
+  --code-number: #ffd7a9;
+  --code-comment: #8c7f70;
+  --code-function: #93c5fd;
+  --code-operator: #d6c3b0;
+}
+
+:root[data-theme="light"] {
+  --code-bg: #faf8f3;
+  --code-chrome: #e9e3d8;
+  --code-text: #1c1915;
+  --code-keyword: #b45309;
+  --code-string: #047857;
+  --code-number: #92400e;
+  --code-comment: #786c5c;
+  --code-function: #1d4ed8;
+  --code-operator: #574e42;
+}
+
+.workspace-page .code-panel pre.syntax-code,
+.workspace-page .code-editor {
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+
+.syntax-code {
+  font: 400 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono', monospace;
+  tab-size: 4;
+  text-align: left;
+  white-space: pre;
+  overflow: auto;
+}
+.syntax-keyword { color: var(--code-keyword); font-weight: 600; }
+.syntax-string { color: var(--code-string); }
+.syntax-number { color: var(--code-number); }
+.syntax-comment { color: var(--code-comment); font-style: italic; }
+.syntax-function { color: var(--code-function); }
+.syntax-operator { color: var(--code-operator); }
+
+.code-editor {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  min-width: 0;
+}
+.workspace-page .code-editor .editor-paint,
+.workspace-page .code-editor textarea {
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
+  font: 400 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, 'JetBrains Mono', monospace;
+  letter-spacing: normal;
+  tab-size: 4;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+.workspace-page .code-editor .editor-paint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  height: 100%;
+  color: var(--code-text);
+  background: var(--code-bg);
+}
+.workspace-page .code-editor textarea {
+  position: relative;
+  display: block;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--code-text);
+  resize: vertical;
+  min-height: 200px;
+  max-height: 260px;
+  overflow: auto;
+  font-style: normal;
+  font-weight: 400;
+}
+.workspace-page .code-editor textarea:focus-visible { outline: 0; }
+.code-editor textarea::selection { background: rgba(255, 179, 71, 0.28); }
+
+@media (forced-colors: active) {
+  .workspace-page .code-editor textarea {
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+    background: Canvas;
+  }
+  .editor-paint { display: none; }
+}
