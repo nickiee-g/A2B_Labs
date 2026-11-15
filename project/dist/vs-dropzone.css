@@ -6,12 +6,12 @@
 .vs-dropzone {
   --vs-dropzone-accent: #ffb347;                  /* glow, lit edge, bars, ticks */
   --vs-dropzone-on-accent: #261500;               /* ink on the accent */
-  --vs-dropzone-ink: #f0edf3;
-  --vs-dropzone-mute: rgba(214,195,176,.64);
+  --vs-dropzone-ink: #edf0f7;
+  --vs-dropzone-mute: rgba(203,213,225,.72);
   --vs-dropzone-accent-ink: var(--vs-dropzone-accent); /* accent used as text ("browse", "Uploaded") */
-  --vs-dropzone-surface: #1b1b22;                 /* zone fill */
-  --vs-dropzone-row: #222129;                     /* row fill */
-  --vs-dropzone-line: rgba(255,179,71,.28);       /* hairlines + resting dashes */
+  --vs-dropzone-surface: #141824;                 /* zone fill */
+  --vs-dropzone-row: #1b2030;                     /* row fill */
+  --vs-dropzone-line: rgba(255,179,71,.30);       /* hairlines + resting dashes */
   --vs-dropzone-error: #ff7a64;
   --vs-dropzone-radius: 14px;
   --vs-dropzone-height: 12.5em;
@@ -26,9 +26,9 @@
 .vs-dropzone *, .vs-dropzone *::before, .vs-dropzone *::after { box-sizing: border-box; }
 /* light surfaces: data-theme="light" */
 .vs-dropzone[data-theme="light"] {
-  --vs-dropzone-accent: #f59e0b; --vs-dropzone-accent-ink: #b45309; --vs-dropzone-on-accent: #1f1100;
-  --vs-dropzone-ink: #1b1814; --vs-dropzone-mute: rgba(87,77,64,.68); --vs-dropzone-surface: #ece6da; --vs-dropzone-row: #fcfbf8;
-  --vs-dropzone-line: rgba(180,83,9,.28); --vs-dropzone-error: #dc2626;
+  --vs-dropzone-accent: #f59e0b; --vs-dropzone-accent-ink: #b45309; --vs-dropzone-on-accent: #1c1000;
+  --vs-dropzone-ink: #0f172a; --vs-dropzone-mute: #475569; --vs-dropzone-surface: #f1f5f9; --vs-dropzone-row: #ffffff;
+  --vs-dropzone-line: rgba(217,119,6,.36); --vs-dropzone-error: #dc2626;
 }
 .vs-dropzone[data-theme="light"] .vs-dropzone-glow { mix-blend-mode: multiply; }
 .vs-dropzone[data-theme="light"] .vs-dropzone-lit rect { stroke: color-mix(in srgb, var(--vs-dropzone-accent), #000 30%); }

@@ -3,144 +3,136 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Workspace (Steps 2–3) — A2B Labs</title>
-  <script src="theme.js?v=angstrom-6"></script>
+  <title>Workspace — A2B Labs</title>
+  <script src="theme.js?v=angstrom-31"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Space+Mono&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="code-colors.css?v=angstrom-6"/>
-  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-6"/>
-  <link rel="stylesheet" href="angstrom.css?v=angstrom-6"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="code-colors.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-breadcrumb-trail.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-31"/>
 </head>
-<body class="workspace-page">
-  <!-- Clean Step-by-Step Guide & Banking File Queue Sidebar -->
-  <aside class="ang-sidebar" id="workspace-sidebar" aria-label="Workspace navigation">
-    <div>
-      <div class="ang-sidebar-head">
-        <a href="/" class="ang-brand" aria-label="A2B Labs home">
-          <div class="ang-brand-top">
-            <span class="ang-brand-dot"></span>
-            <span>A2B Labs</span>
-          </div>
-          <span class="ang-brand-sub">Banking Workspace</span>
-        </a>
-        <button class="ang-sidebar-close sidebar-close" type="button" aria-label="Close sidebar">✕</button>
-      </div>
+<body class="workspace-page ws-new-layout">
+  <a class="skip-link" href="#main-workspace">Skip to workspace</a>
 
-      <!-- Sidebar Banking File Queue -->
-      <div class="sidebar-queue-section" aria-label="Banking file queue">
-        <div class="queue-head-row">
-          <span class="queue-head-title">
-            <span>Banking Queue</span>
-            <span class="queue-count-pill" id="queue-count-pill">1</span>
-          </span>
-          <a class="queue-add-btn" id="sidebar-add-file-btn" href="/#home-step1-content" title="Add or generate banking code on Home">+ Add / AI Bug</a>
+  <!-- Centered Mac Glass Top Header -->
+  <header class="ang-header">
+    <div class="ang-header-inner">
+      <a href="/" class="ang-brand" aria-label="A2B Labs home">
+        <div class="ang-brand-top">
+          <svg class="ang-brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8" class="ang-logo-tile"/>
+            <circle cx="8.5" cy="19.5" r="2.5" class="ang-logo-node-a"/>
+            <path d="M12.2 19.5H19.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M9.5 14.5C12.2 9.2 19.8 9.2 22.5 14.5" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round"/>
+            <path d="M19.7 14.9L22.9 15.2L23.2 12" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="21" y="17.1" width="4.8" height="4.8" rx="1.3" class="ang-logo-node-b"/>
+          </svg>
+          <span>A2B Labs</span>
         </div>
-        <div class="sidebar-queue-list" id="sidebar-queue-list" role="list" aria-label="Queued banking files"></div>
-      </div>
+      </a>
 
-      <div class="ang-rail-label">Workflow Steps</div>
-      <nav class="ang-side-steps" aria-label="Review progress">
-        <a class="ang-side-step done" id="ws-step-0" href="/#home-step1-content">
-          <span class="step-num">✓</span>
-          <span>Add code &amp; policy<small>On Homescreen (Step 1)</small></span>
-        </a>
-        <button class="ang-side-step active" data-step="1" type="button">
-          <span class="step-num">2</span>
-          <span>Review business rules<small>Keep, edit, or drop</small></span>
-        </button>
-        <button class="ang-side-step" data-step="2" type="button">
-          <span class="step-num">3</span>
-          <span>Old vs. New Code<small>Side-by-side &amp; Change IDs</small></span>
-        </button>
-        <a class="ang-side-step" id="sidebar-summary-step" href="/summary.html">
-          <span class="step-num">4</span>
-          <span>Test &amp; Savings Report<small id="sidebar-summary-sub">Run banking tests &amp; ROI</small></span>
-        </a>
+      <nav class="vs-breadcrumb-trail ang-center-nav" aria-label="Main navigation" data-max="4" data-sep="none">
+        <ol>
+          <li>
+            <a href="/">Home</a>
+          </li>
+          <li>
+            <a href="/workspace.html" aria-current="page">Workspace</a>
+            <ul>
+              <li><a href="/workspace.html">Review &amp; Edit Files</a></li>
+              <li><a href="/summary.html">Summary &amp; Export (.zip)</a></li>
+            </ul>
+          </li>
+          <li>
+            <a href="/about.html">About</a>
+            <ul>
+              <li><a href="/about.html#how-it-works">How It Works</a></li>
+              <li><a href="/about.html#features">Features</a></li>
+              <li><a href="/about.html#banking-cases">Banking Cases</a></li>
+              <li><a href="/about.html#privacy">Privacy</a></li>
+            </ul>
+          </li>
+        </ol>
       </nav>
 
-      <div class="ang-rail-label">Pages</div>
-      <nav class="ang-side-links" aria-label="Site navigation">
-        <a class="ang-side-link" href="/"><span class="material-symbols-outlined">home</span>Step 1: Home</a>
-        <a class="ang-side-link" href="/summary.html"><span class="material-symbols-outlined">assessment</span>Test &amp; Summary Report</a>
-        <a class="ang-side-link" href="/how-it-works.html"><span class="material-symbols-outlined">help</span>How It Works</a>
-        <a class="ang-side-link" href="/features.html"><span class="material-symbols-outlined">star</span>Features</a>
-        <a class="ang-side-link" href="/examples.html"><span class="material-symbols-outlined">folder_open</span>Banking Cases</a>
-        <a class="ang-side-link" href="/privacy.html"><span class="material-symbols-outlined">shield_lock</span>Privacy</a>
-      </nav>
-    </div>
-
-    <div class="ang-sidebar-foot">
-      <div class="ang-sensor-box">
-        <div class="ang-sensor-row">
-          <span>Active file</span>
-          <b id="rail-working-file">fee_waiver.cbl</b>
-        </div>
-        <div class="ang-sensor-row">
-          <span>Next milestone</span>
-          <b id="rail-gate-stat">Review rules &amp; diff</b>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Main Workspace Area -->
-  <div class="ang-ws-shell">
-    <header class="ang-ws-topbar">
-      <div class="ang-topbar-left">
-        <button id="sidebar-toggle" class="ang-tool-btn" type="button" aria-controls="workspace-sidebar" aria-expanded="true" title="Hide sidebar">
-          <span aria-hidden="true">☰</span>
-          <span class="sidebar-toggle-label">Hide sidebar</span>
-        </button>
-        <nav class="ang-bus-trail" aria-label="Breadcrumb">
-          <a href="/">Step 1: Home</a>
-          <span class="sep">/</span>
-          <span id="trail-example">fee_waiver.cbl</span>
-          <span class="sep">/</span>
-          <span id="trail-current" class="curr">Step 2: Review Business Rules</span>
-        </nav>
-      </div>
-
-      <div class="ang-topbar-right">
-        <span class="ang-connection-pill" id="connection"><i></i>Checking AI…</span>
-        <a class="ang-tool-btn" href="/#home-step1-content">← Step 1 (Home)</a>
-        <a class="ang-tool-btn" id="topbar-summary-btn" href="/summary.html">Step 4: Test &amp; Report →</a>
+      <div class="ang-header-tools">
+        <button class="ang-tool-btn" type="button" data-motion-toggle>⏸ Pause background</button>
         <button class="ang-tool-btn" type="button" data-theme-toggle>☀ Light mode</button>
-        <button id="reset" class="ang-tool-btn" type="button">↺ Reset</button>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <main class="ang-ws-main">
+  <!-- Workspace Two-Column Shell: File Queue Sidebar (Left) + Queue Viewer & Annotations (Right) -->
+  <div class="ws-wireframe-shell">
+    <aside class="ws-queue-sidebar" id="workspace-sidebar" aria-label="File queue sidebar">
+      <div class="ws-sidebar-top">
+        <div class="queue-head-row">
+          <div class="queue-head-left">
+            <button
+              type="button"
+              class="queue-collapse-btn"
+              id="sidebar-collapse-toggle"
+              aria-expanded="true"
+              aria-controls="workspace-sidebar"
+              aria-label="Collapse file queue sidebar"
+              title="Collapse file queue sidebar"
+            >
+              <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="2.5" width="14" height="13" rx="2.5"/>
+                <line x1="6.5" y1="2.5" x2="6.5" y2="15.5"/>
+                <path class="collapse-chevron" d="M11.5 6.8L9.3 9l2.2 2.2"/>
+              </svg>
+            </button>
+            <span class="queue-head-title">
+              <span>Your Files</span>
+              <span class="queue-count-pill" id="queue-count-pill">1</span>
+            </span>
+          </div>
+          <a class="queue-add-btn" id="sidebar-add-file-btn" href="/" title="Add or create more sample files">
+            <span class="queue-add-plus" aria-hidden="true">+</span>
+            <span class="queue-add-label">Add Files</span>
+          </a>
+        </div>
+        <div class="sidebar-queue-list" id="sidebar-queue-list" role="list" aria-label="Queued files"></div>
+      </div>
+
+      <!-- Bottom CTA: Highlights when all files in queue have been approved -->
+      <div class="ws-sidebar-bottom-cta" id="sidebar-summary-cta-box">
+        <div class="ws-sidebar-progress-label" id="sidebar-approval-progress">0 of 1 files approved</div>
+        <a class="ws-queue-summary-btn" id="sidebar-summary-step" href="/summary.html" title="View Summary and Export">
+          <span class="ws-summary-rail-icon" aria-hidden="true">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2.5" y="2.5" width="13" height="13" rx="2.5"/>
+              <path d="M6 11.5v-3M9 11.5v-5M12 11.5v-2"/>
+            </svg>
+          </span>
+          <span class="ws-summary-btn-copy">
+            <span class="ws-summary-btn-title">View Summary &amp; Export</span>
+            <small id="sidebar-summary-sub">Approve every file to highlight your summary</small>
+          </span>
+        </a>
+      </div>
+    </aside>
+
+    <main id="main-workspace" class="ws-queue-viewer-main">
       <div class="ang-scanline-track" aria-hidden="true">
         <div class="ang-scanline-beam" id="telemetry-beam"></div>
       </div>
-
-      <div class="ang-ambient-matrix" aria-hidden="true"></div>
-
-      <!-- Focused Workspace Stream (Step 2: Rules & Step 3: Side-by-Side Code Comparison) -->
-      <div class="cockpit-wrap">
+      <div class="cockpit-wrap ws-qv-wrap">
         <div id="content" aria-live="polite"></div>
       </div>
     </main>
-
-    <footer class="ang-footer">
-      <div class="ang-footer-left">
-        <span class="ang-brand-dot"></span>
-        <span>Step 2: Review plain-English banking rules · Step 3: Inspect side-by-side Old vs. New Code with Change IDs</span>
-      </div>
-      <div class="ang-footer-right">
-        <span>A2B Labs Banking Workspace</span>
-      </div>
-    </footer>
   </div>
 
-  <script src="sidebar.js?v=angstrom-6"></script>
-  <script src="fixtures.js?v=angstrom-6"></script>
-  <script src="code-colors.js?v=angstrom-6"></script>
-  <script src="vs-dropzone.js?v=angstrom-6"></script>
-  <script src="app.js?v=angstrom-6"></script>
-  <script src="macro-bench.js?v=angstrom-6"></script>
-  <script src="dashboard.js?v=angstrom-6"></script>
+  <script src="fixtures.js?v=angstrom-31"></script>
+  <script src="code-colors.js?v=angstrom-31"></script>
+  <script src="vs-dropzone.js?v=angstrom-31"></script>
+  <script src="vs-breadcrumb-trail.js?v=angstrom-31"></script>
+  <script src="app.js?v=angstrom-31"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+  <script src="macro-bench.js?v=angstrom-31"></script>
 </body>
 </html>

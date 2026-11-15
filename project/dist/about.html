@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Learn how A2B Labs modernizes legacy banking code: How It Works, Features, Banking Cases, and Privacy."/>
+  <title>About — A2B Labs</title>
+  <script src="theme.js?v=angstrom-31"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="code-colors.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-breadcrumb-trail.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-31"/>
+</head>
+<body class="home-bench-page">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="ang-header">
+    <div class="ang-header-inner">
+      <a href="/" class="ang-brand" aria-label="A2B Labs home">
+        <div class="ang-brand-top">
+          <svg class="ang-brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8" class="ang-logo-tile"/>
+            <circle cx="8.5" cy="19.5" r="2.5" class="ang-logo-node-a"/>
+            <path d="M12.2 19.5H19.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M9.5 14.5C12.2 9.2 19.8 9.2 22.5 14.5" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round"/>
+            <path d="M19.7 14.9L22.9 15.2L23.2 12" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="21" y="17.1" width="4.8" height="4.8" rx="1.3" class="ang-logo-node-b"/>
+          </svg>
+          <span>A2B Labs</span>
+        </div>
+      </a>
+
+      <nav class="vs-breadcrumb-trail ang-center-nav" aria-label="Main navigation" data-max="4" data-sep="none">
+        <ol>
+          <li>
+            <a href="/">Home</a>
+          </li>
+          <li>
+            <a href="/workspace.html">Workspace</a>
+            <ul>
+              <li><a href="/workspace.html">Review &amp; Edit Files</a></li>
+              <li><a href="/summary.html">Summary &amp; Export (.zip)</a></li>
+            </ul>
+          </li>
+          <li>
+            <a href="/about.html" aria-current="page">About</a>
+            <ul>
+              <li><a href="#how-it-works">How It Works</a></li>
+              <li><a href="#features">Features</a></li>
+              <li><a href="#banking-cases">Banking Cases</a></li>
+              <li><a href="#privacy">Privacy</a></li>
+            </ul>
+          </li>
+        </ol>
+      </nav>
+
+      <div class="ang-header-tools">
+        <button class="ang-tool-btn" type="button" data-motion-toggle>⏸ Pause background</button>
+        <button class="ang-tool-btn" type="button" data-theme-toggle>☀ Light mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="ang-bench-main">
+    <div class="ang-bench-stage" style="min-height: calc(100vh - 76px); overflow-y: auto;">
+      <div class="ang-three-wrap" aria-hidden="true">
+        <div id="threejs-macro-bench"></div>
+      </div>
+      <div class="ang-ambient-matrix" aria-hidden="true"></div>
+      <div class="ang-hud-scrim" aria-hidden="true"></div>
+
+      <div class="about-shell" style="position:relative; z-index:4;">
+        <div class="ang-eyebrow-ribbon">
+          <span class="ang-eyebrow-bar"></span>
+          <span>About A2B Labs</span>
+        </div>
+        <h1 class="ang-hero-h1 home-h1-compact">Plain-English Banking Modernization</h1>
+        <p class="ang-hero-lead home-lead-compact">
+          See how our simple review process works, the controls that keep your team in charge, real banking examples, and how your files stay private.
+        </p>
+
+        <div class="about-tabs" role="tablist" aria-label="About sections">
+          <button class="about-tab is-active" type="button" role="tab" aria-selected="true" data-about-tab="how-it-works">How It Works</button>
+          <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="features">Features</button>
+          <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="banking-cases">Banking Cases</button>
+          <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="privacy">Privacy</button>
+        </div>
+
+        <section class="about-panel" id="how-it-works" data-about-panel="how-it-works">
+          <div class="about-grid">
+            <article class="about-card">
+              <h3>01 · Add Your Files on Home</h3>
+              <p>Drop in older banking files, pick a ready-to-try sample, or type in everyday English what rule you want checked.</p>
+            </article>
+            <article class="about-card">
+              <h3>02 · Compare Old vs. Updated Code</h3>
+              <p>View your original file side by side with the cleaned-up version in Workspace, with every changed section highlighted for you.</p>
+            </article>
+            <article class="about-card">
+              <h3>03 · Read Plain-English Change Notes</h3>
+              <p>Every update comes with a simple note explaining what that part does and why it changed. Edit or turn off any note before approving.</p>
+            </article>
+            <article class="about-card">
+              <h3>04 · Review Summary &amp; Export (.zip)</h3>
+              <p>See a plain-English summary of everything that improved, check estimated time and money saved, and download your approved files in one .zip folder.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="about-panel" id="features" data-about-panel="features" hidden>
+          <div class="about-grid">
+            <article class="about-card">
+              <h3>Finds Hidden Rule Mistakes</h3>
+              <p>Spots policy errors buried inside older banking files — like student fee waivers that were accidentally skipped or overdraft fees charged too early.</p>
+            </article>
+            <article class="about-card">
+              <h3>Your Team Stays in Control</h3>
+              <p>Nothing goes out automatically. Reviewers can edit any plain-English note or turn off a change and rebuild the update before approving.</p>
+            </article>
+            <article class="about-card">
+              <h3>Point-and-Match Highlighting</h3>
+              <p>Point at any plain-English note to light up the exact lines before and after the fix — no programming knowledge needed to follow along.</p>
+            </article>
+            <article class="about-card">
+              <h3>Clear Summary &amp; One-Click .zip</h3>
+              <p>Creates an easy-to-share overview showing what each file did before, what it does now, and how much time and budget your team saves.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="about-panel" id="banking-cases" data-about-panel="banking-cases" hidden>
+          <div class="about-grid">
+            <article class="about-card">
+              <h3>fee_waiver.cbl · Monthly Fee Waiver</h3>
+              <p>Fixes a rule error that wrongly charged students under 25 a $12 monthly checking fee when they didn't have direct deposits.</p>
+            </article>
+            <article class="about-card">
+              <h3>overdraft_fee.cbl · Overdraft Protection</h3>
+              <p>Applies the $50 cushion rule and checks combined checking and savings balances before charging a $35 overdraft fee.</p>
+            </article>
+            <article class="about-card">
+              <h3>wire_limit_check.cbl · Wire Approval Limits</h3>
+              <p>Makes sure international wires over $10,000 always require two-person sign-off instead of being approved automatically.</p>
+            </article>
+            <article class="about-card">
+              <h3>loan_interest_calc.cbl · Loan Grace Period</h3>
+              <p>Restores the 15-day late payment grace period and keeps the 4.0% minimum interest rate floor intact.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="about-panel" id="privacy" data-about-panel="privacy" hidden>
+          <div class="about-grid">
+            <article class="about-card">
+              <h3>Stays on Your Device</h3>
+              <p>Your queued files, edit notes, and savings calculator settings stay in temporary browser storage on your machine while you work.</p>
+            </article>
+            <article class="about-card">
+              <h3>Not Stored for Model Training</h3>
+              <p>Uploaded snippets and sample runs are processed only for your active session and are never saved to train external models.</p>
+            </article>
+            <article class="about-card">
+              <h3>Safe Offline Preview</h3>
+              <p>Reviews and sample checks run safely in an isolated workspace — never connecting to live customer accounts or bank databases.</p>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const tabs = document.querySelectorAll('[data-about-tab]');
+      const panels = document.querySelectorAll('[data-about-panel]');
+      const crumbCur = document.getElementById('about-crumb-current');
+      const LABELS = {
+        'how-it-works': 'How It Works',
+        'features': 'Features',
+        'banking-cases': 'Banking Cases',
+        'privacy': 'Privacy'
+      };
+      function activate(id) {
+        if (!LABELS[id]) id = 'how-it-works';
+        tabs.forEach(t => {
+          const on = t.dataset.aboutTab === id;
+          t.classList.toggle('is-active', on);
+          t.setAttribute('aria-selected', String(on));
+        });
+        panels.forEach(p => {
+          p.hidden = p.dataset.aboutPanel !== id;
+        });
+        if (crumbCur) crumbCur.textContent = LABELS[id];
+      }
+      tabs.forEach(t => t.addEventListener('click', () => {
+        const id = t.dataset.aboutTab;
+        history.replaceState(null, '', '#' + id);
+        activate(id);
+      }));
+      window.addEventListener('hashchange', () => activate(location.hash.replace('#', '')));
+      if (location.hash) activate(location.hash.replace('#', ''));
+    })();
+  </script>
+  <script src="vs-breadcrumb-trail.js?v=angstrom-31"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+  <script src="macro-bench.js?v=angstrom-31"></script>
+</body>
+</html>

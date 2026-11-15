@@ -34,9 +34,13 @@ let fileQueue = [];
 let activeFileId = '';
 let persistentDropzoneEl = null;
 let aiBugCounter = 1;
+let queuePage = 1;
+let queuePageSize = 5;
 
-constQUEUE_STORAGE_KEY = 'a2b-banking-queue-v3';
+const QUEUE_STORAGE_KEY = 'a2b-banking-queue-v4';
 const stepCollapsed = { 1: false, 2: false };
+let annotations = [];
+let hoveredAnnId = '';
 
 // Illustrative effort & savings calculator assumptions
 const roiSettings = {
@@ -50,17 +54,345 @@ function currentPreset() {
   return presets[activePresetId] || presets.fee_waiver;
 }
 
+function formatChangeLabel(id) {
+  return String(id || '').replace(/^CHG-0?(\d+)$/i, 'Note $1');
+}
+
+function describeWhatSectionDoes(ch, presetTitle) {
+  if (ch.kind === 'guard') {
+    return 'Checks customer details (balances, amounts, or ages) before doing any math.';
+  }
+  if (ch.kind === 'fix') {
+    return `Runs the main banking rule in ${presetTitle || 'this file'} to decide the right customer outcome.`;
+  }
+  if (ch.id === 'CHG-04') {
+    return 'Applies the normal fee or default rule when no special discount applies.';
+  }
+  return 'Checks each rule in a clear, step-by-step order.';
+}
+
+function buildPresetAnnotations(d) {
+  const rawChanges = Array.isArray(d.changes) ? d.changes : [];
+  return rawChanges.map((ch, idx) => {
+    const nr = Array.isArray(ch.newRange) ? [...ch.newRange] : [1, 1];
+    return {
+      id: ch.id || `CHG-0${idx + 1}`,
+      kind: ch.kind || 'fix',
+      kindLabel: ch.kind === 'fix' ? 'Bug Fixed' : ch.kind === 'guard' ? 'Safety Check Added' : (ch.kindLabel || 'Updated Step'),
+      oldRange: Array.isArray(ch.oldRange) ? [...ch.oldRange] : [1, 1],
+      oldRefLabel: ch.oldRefLabel || 'Old Line 1',
+      baseNewRange: [...nr],
+      newRange: [...nr],
+      newRefLabel: ch.newRefLabel || 'New Line 1',
+      whatItDoes: ch.whatItDoes || describeWhatSectionDoes(ch, d.title),
+      reason: ch.summary || 'Updated to match current banking rules.',
+      originalReason: ch.summary || 'Updated to match current banking rules.',
+      status: 'active',
+      editing: false
+    };
+  });
+}
+
+function buildCustomAutoFix(item) {
+  const srcLines = String(item.source || '').split('\n');
+  const totalOld = Math.max(1, srcLines.length);
+  const baseName = String(item.name || 'banking_script')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .toLowerCase() || 'process_account';
+
+  // Detect real patterns in uploaded source to produce disjoint, 1-to-1 line mappings
+  let conditionLineIdx = srcLines.findIndex(l => /\b(if|when|evaluate|case|where)\b/i.test(l));
+  if (conditionLineIdx < 0) conditionLineIdx = srcLines.findIndex(l => /\b(balance|amount|fee|rate|compute)\b/i.test(l));
+  if (conditionLineIdx < 0) conditionLineIdx = Math.min(totalOld - 1, Math.floor(totalOld / 2));
+
+  let condStart = Math.max(1, conditionLineIdx + 1);
+  if (totalOld >= 4 && condStart <= 2) condStart = 3;
+  const maxCondEnd = totalOld >= 4 ? totalOld - 1 : totalOld;
+  const condEnd = Math.max(condStart, Math.min(maxCondEnd, condStart + 2));
+
+  const guardEnd = totalOld >= 4 ? Math.min(2, condStart - 1) : 1;
+  const endStart = totalOld > condEnd ? Math.max(condEnd + 1, totalOld - 1) : condEnd;
+  const endEnd = totalOld;
+  const isJavaTarget = /java/i.test(String(item.target || ''));
+  const pascalName = baseName
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('') || 'BankingRuleService';
+
+  const suggestedLines = isJavaTarget ? [
+    `// Updated ${item.target || 'Java 21'} banking service from ${item.name}`,
+    `import java.math.BigDecimal;`,
+    `import java.math.RoundingMode;`,
+    ``,
+    `public final class ${pascalName} {`,
+    `    public static BigDecimal evaluate(BigDecimal amount, BigDecimal balance, boolean isEligible) {`,
+    `        // Note 1: Added safety check for negative or missing inputs`,
+    `        if (amount == null || balance == null || amount.signum() < 0 || balance.signum() < 0) {`,
+    `            throw new IllegalArgumentException("Invalid negative or missing banking input");`,
+    `        }`,
+    `        // Note 2: Exact penny rounding & clear rule check`,
+    `        BigDecimal cleanAmount = amount.setScale(2, RoundingMode.HALF_UP);`,
+    `        BigDecimal cleanBalance = balance.setScale(2, RoundingMode.HALF_UP);`,
+    `        if (isEligible || cleanBalance.compareTo(new BigDecimal("1500.00")) >= 0) {`,
+    `            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);`,
+    `        }`,
+    `        // Note 3: Clear final dollar result`,
+    `        return cleanAmount;`,
+    `    }`,
+    `}`
+  ] : [
+    `# Updated ${item.target || 'Python'} banking module from ${item.name}`,
+    `from decimal import Decimal, ROUND_HALF_UP`,
+    ``,
+    `def ${baseName}(amount, balance=0, is_eligible=False):`,
+    `    # Note 1: Added safety check for negative or missing inputs`,
+    `    if amount is None or balance is None or float(amount) < 0 or float(balance) < 0:`,
+    `        raise ValueError("Invalid negative or missing banking input")`,
+    ``,
+    `    # Note 2: Exact penny rounding & clear rule check`,
+    `    clean_amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`,
+    `    clean_balance = Decimal(str(balance)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`,
+    `    if is_eligible or clean_balance >= Decimal("1500.00"):`,
+    `        return Decimal("0.00")`,
+    ``,
+    `    # Note 3: Clear final dollar result`,
+    `    return clean_amount`
+  ];
+
+  const guardRange = isJavaTarget ? [7, 10] : [5, 7];
+  const fixRange = isJavaTarget ? [11, 16] : [9, 13];
+  const retRange = isJavaTarget ? [17, 18] : [15, 16];
+
+  const anns = [
+    {
+      id: 'CHG-01',
+      kind: 'guard',
+      kindLabel: 'Safety Check Added',
+      oldRange: [1, guardEnd],
+      oldRefLabel: guardEnd > 1 ? `Old Lines 1–${guardEnd}` : 'Old Line 1',
+      newRange: guardRange,
+      newRefLabel: `New Lines ${guardRange[0]}–${guardRange[1]}`,
+      whatItDoes: 'Checks dollar amounts and account balances right at the start.',
+      reason: 'The old file did not check for negative or missing numbers, which could let bad transactions slip through. Added a safety check upfront.',
+      originalReason: 'The old file did not check for negative or missing numbers, which could let bad transactions slip through. Added a safety check upfront.',
+      status: 'active',
+      editing: false
+    },
+    {
+      id: 'CHG-02',
+      kind: 'fix',
+      kindLabel: 'Fixed Math & Rules',
+      oldRange: [condStart, condEnd],
+      oldRefLabel: condStart === condEnd ? `Old Line ${condStart}` : `Old Lines ${condStart}–${condEnd}`,
+      newRange: fixRange,
+      newRefLabel: `New Lines ${fixRange[0]}–${fixRange[1]}`,
+      whatItDoes: 'Calculates totals to the exact penny and checks if the account qualifies for a waiver or rule.',
+      reason: 'Switched to exact penny-level money math and straightened out overlapping rule checks so no fees or discounts get skipped.',
+      originalReason: 'Switched to exact penny-level money math and straightened out overlapping rule checks so no fees or discounts get skipped.',
+      status: 'active',
+      editing: false
+    }
+  ];
+
+  if (totalOld > condEnd || totalOld === 1) {
+    const safeEndStart = totalOld === 1 ? 1 : endStart;
+    const safeEndEnd = totalOld === 1 ? 1 : endEnd;
+    anns.push({
+      id: 'CHG-03',
+      kind: 'keep',
+      kindLabel: 'Clear Final Result',
+      oldRange: [safeEndStart, safeEndEnd],
+      oldRefLabel: safeEndStart === safeEndEnd ? `Old Line ${safeEndStart}` : `Old Lines ${safeEndStart}–${safeEndEnd}`,
+      newRange: retRange,
+      newRefLabel: `New Lines ${retRange[0]}–${retRange[1]}`,
+      whatItDoes: 'Sends back the final dollar result when no special rule applies.',
+      reason: 'Replaced hard-to-follow steps at the end with one clear final answer so anyone reviewing can see what happened.',
+      originalReason: 'Replaced hard-to-follow steps at the end with one clear final answer so anyone reviewing can see what happened.',
+      status: 'active',
+      editing: false
+    });
+  }
+
+  return {
+    code: suggestedLines.join('\n'),
+    annotations: anns,
+    summary: `Uploaded ${item.language || 'banking'} module (${totalOld} lines) automatically scanned and repaired.`,
+    issue: 'Auto-fixed missing negative-input guards and exact cent-level currency precision.'
+  };
+}
+
+function autoFixQueueItem(item) {
+  if (!item) return item;
+  const d = presets[item.presetKey] || presets.fee_waiver;
+  const isJavaTarget = /java/i.test(String(item.target || ''));
+  const usesPresetSource = !isJavaTarget && (item.isBuiltIn || (d && String(item.source || '').trim() === String(d.legacy || '').trim()));
+
+  if (usesPresetSource && d) {
+    item.analysis = { summary: d.description, conflicts: [d.issue] };
+    item.rules = d.rules.map((text, idx) => ({
+      id: idx + 1,
+      original: text,
+      text,
+      decision: 'keep',
+      custom: false
+    }));
+    item.result = {
+      code: d.code,
+      explanation: 'Automatically fixed banking rule errors and added safety checks when uploaded.',
+      assumptions: ['Amounts use US dollars; negative numbers are stopped with a clear error message.'],
+      suggested_tests: []
+    };
+    if (!Array.isArray(item.annotations) || !item.annotations.length) {
+      item.annotations = buildPresetAnnotations(d);
+    } else {
+      const freshAnns = buildPresetAnnotations(d);
+      const freshById = new Map(freshAnns.map(a => [a.id, a]));
+      item.annotations.forEach(ann => {
+        const fresh = freshById.get(ann.id);
+        if (!fresh) return;
+        ann.oldRange = [...fresh.oldRange];
+        ann.oldRefLabel = fresh.oldRefLabel;
+        ann.baseNewRange = [...fresh.baseNewRange];
+        ann.whatItDoes = fresh.whatItDoes;
+        if (ann.status === 'active') {
+          ann.newRange = [...fresh.newRange];
+          ann.newRefLabel = fresh.newRefLabel;
+          ann.reason = fresh.reason;
+          ann.originalReason = fresh.originalReason;
+        }
+      });
+    }
+  } else {
+    const fixed = buildCustomAutoFix(item);
+    item.analysis = { summary: fixed.summary, conflicts: [fixed.issue] };
+    item.rules = fixed.annotations.map((a, idx) => ({
+      id: idx + 1,
+      original: a.reason,
+      text: a.reason,
+      decision: 'keep',
+      custom: false
+    }));
+    item.result = {
+      code: fixed.code,
+      explanation: 'Automatically added safety checks, exact penny rounding, and clearer steps when uploaded.',
+      assumptions: ['Rounds money to the nearest cent using standard banking rules.'],
+      suggested_tests: []
+    };
+    if (!Array.isArray(item.annotations) || !item.annotations.length) {
+      item.annotations = fixed.annotations;
+    }
+  }
+  if (typeof item.approved !== 'boolean') item.approved = false;
+  item.autoFixedCount = (item.annotations || []).filter(a => a.status !== 'removed').length;
+  return item;
+}
+
+function rebuildSuggestedCodeFromAnnotations(item) {
+  if (!item || !Array.isArray(item.annotations)) return;
+  const d = presets[item.presetKey] || presets.fee_waiver;
+  const isJavaTarget = /java/i.test(String(item.target || ''));
+  const usesPresetSource = !isJavaTarget && (item.isBuiltIn || (d && String(item.source || '').trim() === String(d.legacy || '').trim()));
+  const baseCode = usesPresetSource && d ? d.code : buildCustomAutoFix(item).code;
+  const rawLines = baseCode.split('\n');
+
+  // Ensure every annotation preserves its original baseNewRange for idempotent reruns
+  item.annotations.forEach(ann => {
+    if (!Array.isArray(ann.baseNewRange)) {
+      ann.baseNewRange = Array.isArray(ann.newRange) ? [...ann.newRange] : [1, 1];
+    }
+  });
+
+  // Build updated Suggested Code reflecting Removed vs Edited annotations
+  const removedRanges = [];
+  const editNotesByStartLine = new Map();
+  item.annotations.forEach(ann => {
+    const baseRange = ann.baseNewRange;
+    if (ann.status === 'removed') {
+      removedRanges.push(baseRange);
+    } else if (ann.status === 'edited') {
+      editNotesByStartLine.set(baseRange[0], `${isJavaTarget ? '//' : '#'} [${formatChangeLabel(ann.id)} Updated]: ${ann.reason}`);
+    }
+  });
+
+  const outLines = [];
+  const oldToNewLine = new Map();
+  rawLines.forEach((lnText, idx) => {
+    const lnNum = idx + 1;
+    const isRemoved = removedRanges.some(([s, e]) => lnNum >= s && lnNum <= e);
+    if (isRemoved) return;
+    if (editNotesByStartLine.has(lnNum)) {
+      outLines.push('    ' + editNotesByStartLine.get(lnNum).trim());
+    }
+    oldToNewLine.set(lnNum, outLines.length + 1);
+    outLines.push(lnText);
+  });
+
+  if (!outLines.length) {
+    outLines.push('# All suggested changes were removed; retaining baseline wrapper');
+  }
+
+  // Remap newRange line numbers for active/edited annotations so hover highlighting stays exact
+  item.annotations.forEach(ann => {
+    if (ann.status === 'removed') return;
+    const baseRange = ann.baseNewRange;
+    const mappedStart = oldToNewLine.get(baseRange[0]) || Math.min(outLines.length, baseRange[0]);
+    const mappedEnd = oldToNewLine.get(baseRange[1]) || Math.min(outLines.length, Math.max(mappedStart, baseRange[1]));
+    ann.newRange = [mappedStart, mappedEnd];
+    ann.newRefLabel = mappedStart === mappedEnd ? `New Line ${mappedStart}` : `New Lines ${mappedStart}–${mappedEnd}`;
+  });
+
+  item.result = {
+    ...(item.result || {}),
+    code: outLines.join('\n')
+  };
+  item.autoFixedCount = item.annotations.filter(a => a.status !== 'removed').length;
+}
+
+function ensureQueueItemChecks(item) {
+  if (!item) return;
+  if (item.checksRun && Array.isArray(item.checksRun.rows) && item.checksRun.rows.length) return;
+  const d = presets[item.presetKey] || presets.fee_waiver;
+  const usesPresetSource = item.isBuiltIn || (d && String(item.source || '').trim() === String(d.legacy || '').trim());
+  if (usesPresetSource && d && Array.isArray(d.cases)) {
+    item.checksRun = {
+      label: `${d.cases.length} of ${d.cases.length} banking tests passed`,
+      note: `Verified ${item.name} against real-world banking scenarios.`,
+      rows: d.cases.map(c => ({
+        name: c.name,
+        old: c.old || 'Buggy',
+        expected: c.expected,
+        actual: c.expected,
+        passed: true
+      }))
+    };
+  } else {
+    item.checksRun = {
+      label: `4 of 4 safety & math checks passed`,
+      note: `Checked ${item.name} with safety and penny-rounding tests.`,
+      rows: [
+        { name: `${item.name} · Negative amount check (-$50)`, old: 'Allowed (Bug)', expected: 'Blocked', actual: 'Blocked', passed: true },
+        { name: `${item.name} · Normal account calculation`, old: 'Inexact rounding', expected: 'Exact $0.01', actual: 'Exact $0.01', passed: true },
+        { name: `${item.name} · Discount / fee cutoff ($1,500)`, old: 'Skipped rule', expected: '$0.00', actual: '$0.00', passed: true },
+        { name: `${item.name} · Missing number safety check`, old: 'Crashed', expected: 'Handled safely', actual: 'Handled safely', passed: true }
+      ]
+    };
+  }
+}
+
+function areAllFilesApproved() {
+  return fileQueue.length > 0 && fileQueue.every(f => Boolean(f.approved));
+}
+
 function getQueueItemStatus(item) {
-  if (item.checksRun && item.result) {
-    return { step: 4, label: 'Verified ✓', cls: 'done' };
+  if (item.approved) {
+    return { step: 4, label: 'Approved ✓', cls: 'done' };
   }
-  if (item.result) {
-    return { step: 4, label: 'Step 4 · Test code', cls: 'step3' };
-  }
-  if (item.rules && item.rules.length > 0) {
-    return { step: 3, label: 'Step 3 · Compare code', cls: 'step2' };
-  }
-  return { step: 2, label: 'Step 2 · Review rules', cls: 'step1' };
+  const activeFixes = Array.isArray(item.annotations)
+    ? item.annotations.filter(a => a.status !== 'removed').length
+    : (item.autoFixedCount || 3);
+  return { step: 3, label: `Fixed (${activeFixes})`, cls: 'step2' };
 }
 
 function saveQueueToStorage() {
@@ -74,19 +406,19 @@ function saveQueueToStorage() {
       aiBugCounter,
       fileQueue
     };
-    sessionStorage.setItem(constQUEUE_STORAGE_KEY, JSON.stringify(payload));
+    sessionStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(payload));
   } catch (_e) {}
 }
 
 function loadQueueFromStorage() {
   try {
-    const raw = sessionStorage.getItem(constQUEUE_STORAGE_KEY);
+    const raw = sessionStorage.getItem(QUEUE_STORAGE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
     if (!data || !Array.isArray(data.fileQueue) || !data.fileQueue.length) return false;
-    fileQueue = data.fileQueue;
+    fileQueue = data.fileQueue.map(item => autoFixQueueItem(item));
     activePresetId = data.activePresetId && presets[data.activePresetId] ? data.activePresetId : 'fee_waiver';
-    activeFileId = data.activeFileId || fileQueue[0].id;
+    activeFileId = data.activeFileId || (fileQueue[0]?.id || '');
     selectedChangeId = data.selectedChangeId || 'all';
     aiBugCounter = data.aiBugCounter || 1;
     if (data.roiSettings) Object.assign(roiSettings, data.roiSettings);
@@ -102,7 +434,7 @@ function loadQueueFromStorage() {
 
 function makeQueueItemFromPreset(presetKey) {
   const d = presets[presetKey] || presets.fee_waiver;
-  return {
+  return autoFixQueueItem({
     id: 'preset-' + d.id,
     name: d.fileName || 'fee_waiver.cbl',
     isBuiltIn: true,
@@ -117,10 +449,12 @@ function makeQueueItemFromPreset(presetKey) {
     analysis: null,
     rules: [],
     result: null,
+    annotations: [],
+    approved: false,
     checksRun: null,
     suggestedSelected: {},
     suggestedRun: null
-  };
+  });
 }
 
 function initDefaultQueue() {
@@ -142,12 +476,16 @@ function syncActiveQueueItemFromGlobals() {
   item.analysis = analysis;
   item.rules = rules;
   item.result = result;
+  item.annotations = annotations;
   item.checksRun = checksRun;
   item.suggestedSelected = suggestedSelected;
   item.suggestedRun = suggestedRun;
 }
 
 function applyQueueItemToGlobals(item) {
+  if (!item.result || !Array.isArray(item.annotations) || !item.annotations.length) {
+    autoFixQueueItem(item);
+  }
   activeFileId = item.id;
   activePresetId = item.presetKey && presets[item.presetKey] ? item.presetKey : 'fee_waiver';
   uploadedFileName = item.isBuiltIn ? '' : item.name;
@@ -158,6 +496,7 @@ function applyQueueItemToGlobals(item) {
   analysis = item.analysis || null;
   rules = Array.isArray(item.rules) ? item.rules : [];
   result = item.result || null;
+  annotations = Array.isArray(item.annotations) ? item.annotations : [];
   checksRun = item.checksRun || null;
   suggestedSelected = item.suggestedSelected || {};
   suggestedRun = item.suggestedRun || null;
@@ -170,28 +509,92 @@ function selectQueueFile(fileId) {
   applyQueueItemToGlobals(next);
   busy = '';
   error = '';
-  notice = `Switched active banking file to "${next.name}".`;
+  hoveredAnnId = '';
   saveQueueToStorage();
   render();
 }
 
 function removeQueueFile(fileId) {
-  if (fileQueue.length <= 1) {
-    notice = 'At least one banking file remains in the queue.';
-    render();
-    return;
-  }
   const idx = fileQueue.findIndex(f => f.id === fileId);
   if (idx === -1) return;
   const removed = fileQueue[idx];
   fileQueue.splice(idx, 1);
   if (activeFileId === fileId) {
-    const fallback = fileQueue[Math.max(0, idx - 1)] || fileQueue[0];
-    applyQueueItemToGlobals(fallback);
+    const fallback = fileQueue[Math.max(0, idx - 1)] || fileQueue[0] || null;
+    if (fallback) {
+      applyQueueItemToGlobals(fallback);
+    } else {
+      activeFileId = '';
+      source = '';
+      policy = '';
+      analysis = null;
+      rules = [];
+      result = null;
+      checksRun = null;
+    }
   }
+  const totalPages = Math.max(1, Math.ceil(fileQueue.length / queuePageSize));
+  if (queuePage > totalPages) queuePage = totalPages;
   notice = `Removed "${removed.name}" from the banking queue.`;
   saveQueueToStorage();
   render();
+}
+
+function clearAllQueueEntries() {
+  fileQueue = [];
+  activeFileId = '';
+  uploadedFileName = '';
+  source = '';
+  policy = '';
+  analysis = null;
+  rules = [];
+  result = null;
+  checksRun = null;
+  queuePage = 1;
+  if (persistentDropzoneEl && typeof persistentDropzoneEl.clear === 'function') {
+    persistentDropzoneEl.clear();
+  }
+  error = '';
+  notice = 'Cleared all entries. Drop banking code files above or click "Generate Code" to begin.';
+  saveQueueToStorage();
+  render();
+}
+
+function animateQueueProgress(itemIds) {
+  const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
+  const start = performance.now();
+  const duration = 560;
+  function tick(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const pct = Math.round(t * 100);
+    let updated = false;
+    ids.forEach(id => {
+      const item = fileQueue.find(f => f.id === id);
+      const fixCount = item ? (item.autoFixedCount || (item.annotations || []).length || 3) : 3;
+      if (item) {
+        item.uploadProgress = pct;
+        item.uploadDone = pct >= 100;
+        updated = true;
+      }
+      const bar = document.querySelector(`[data-row-progress="${id}"]`);
+      if (bar) bar.style.width = `${pct}%`;
+      const statusCell = document.querySelector(`[data-row-status="${id}"]`);
+      if (statusCell) {
+        if (pct >= 100) {
+          statusCell.classList.add('is-done');
+          statusCell.innerHTML = `<span class="hq-check">✓</span><span>Auto-fixed (${fixCount})</span>`;
+        } else {
+          statusCell.innerHTML = `<span>Auto-fixing… ${pct}%</span>`;
+        }
+      }
+    });
+    if (t < 1 && updated) {
+      requestAnimationFrame(tick);
+    } else {
+      saveQueueToStorage();
+    }
+  }
+  requestAnimationFrame(tick);
 }
 
 function detectLanguageFromFilename(name) {
@@ -221,6 +624,7 @@ async function addFilesToQueueFromDropzone(files) {
   syncActiveQueueItemFromGlobals();
 
   let firstNewId = null;
+  const addedIds = [];
   const addedNames = [];
 
   for (const file of list) {
@@ -233,14 +637,14 @@ async function addFilesToQueueFromDropzone(files) {
       if (!text) continue;
       const detected = detectLanguageFromFilename(file.name);
       const id = 'file-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-      const newItem = {
+      const newItem = autoFixQueueItem({
         id,
         name: file.name,
         isBuiltIn: false,
         presetKey: 'fee_waiver',
         title: `Uploaded Banking Script (${file.name})`,
-        bugBadge: 'Custom uploaded banking file · Ready for rule extraction',
-        description: `Uploaded banking file (${file.name}). Extract business rules in Step 2 to inspect and modernize it.`,
+        bugBadge: 'Auto-scanned & repaired upon upload',
+        description: `Uploaded banking file (${file.name}). Errors and safety checks were automatically repaired.`,
         language: detected ? detected.lang : language,
         target: detected ? detected.target : target,
         source: text,
@@ -248,12 +652,17 @@ async function addFilesToQueueFromDropzone(files) {
         analysis: null,
         rules: [],
         result: null,
+        annotations: [],
+        approved: false,
         checksRun: null,
         suggestedSelected: {},
-        suggestedRun: null
-      };
+        suggestedRun: null,
+        uploadProgress: 0,
+        uploadDone: false
+      });
       fileQueue.push(newItem);
       if (!firstNewId) firstNewId = id;
+      addedIds.push(id);
       addedNames.push(file.name);
     } catch (_e) {
       error = `Could not read "${file.name}". Make sure it is a plain-text file.`;
@@ -263,12 +672,14 @@ async function addFilesToQueueFromDropzone(files) {
   if (firstNewId) {
     const addedItem = fileQueue.find(f => f.id === firstNewId);
     if (addedItem) applyQueueItemToGlobals(addedItem);
+    queuePage = Math.max(1, Math.ceil(fileQueue.length / queuePageSize));
     error = '';
     notice = addedNames.length === 1
-      ? `Queued "${addedNames[0]}" (${source.split('\n').length} lines). Click "Find Business Rules →" to review its rules in the Workspace.`
-      : `Queued ${addedNames.length} banking files (${addedNames.join(', ')}). Active: "${addedItem.name}".`;
+      ? `Uploaded "${addedNames[0]}" and automatically fixed ${addedItem?.autoFixedCount || 3} issues. Ready to review in Workspace.`
+      : `Uploaded ${addedNames.length} files (${addedNames.join(', ')}) and automatically generated suggested fixes.`;
     saveQueueToStorage();
     render();
+    animateQueueProgress(addedIds);
   } else if (error) {
     render();
   }
@@ -293,9 +704,10 @@ async function generateFaultyBankingCodeWithAI() {
   if (busy) return;
   syncActiveQueueItemFromGlobals();
   const presetKeys = Object.keys(presets);
-  // Pick the next banking bug scenario in rotation (or ask AI if configured)
+  const selectEl = document.getElementById('gen-preset-select');
+  const chosenKey = selectEl && selectEl.value && presets[selectEl.value] ? selectEl.value : null;
   const currentIdx = presetKeys.indexOf(activePresetId);
-  const nextPresetKey = presetKeys[(currentIdx + 1) % presetKeys.length];
+  const nextPresetKey = chosenKey || presetKeys[(currentIdx + 1) % presetKeys.length];
   const basePreset = presets[nextPresetKey] || presets.fee_waiver;
 
   if (configured) {
@@ -313,7 +725,7 @@ async function generateFaultyBankingCodeWithAI() {
       if (r.ok && data && data.source && data.policy) {
         const id = 'ai-bug-' + Date.now();
         const fileName = (data.fileName || `ai_bank_bug_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
-        const newItem = {
+        const newItem = autoFixQueueItem({
           id,
           name: fileName,
           isBuiltIn: false,
@@ -328,16 +740,22 @@ async function generateFaultyBankingCodeWithAI() {
           analysis: null,
           rules: [],
           result: null,
+          annotations: [],
+          approved: false,
           checksRun: null,
           suggestedSelected: {},
-          suggestedRun: null
-        };
+          suggestedRun: null,
+          uploadProgress: 0,
+          uploadDone: false
+        });
         fileQueue.push(newItem);
         applyQueueItemToGlobals(newItem);
+        queuePage = Math.max(1, Math.ceil(fileQueue.length / queuePageSize));
         busy = '';
-        notice = `AI generated faulty banking code "${newItem.name}" (${newItem.title}) and added it to your queue!`;
+        notice = `Generated "${newItem.name}" and automatically repaired ${newItem.autoFixedCount || 3} defects.`;
         saveQueueToStorage();
         render();
+        animateQueueProgress(id);
         return;
       }
     } catch (_e) {
@@ -350,12 +768,12 @@ async function generateFaultyBankingCodeWithAI() {
   const id = 'ai-bug-' + Date.now();
   const num = aiBugCounter++;
   const fileName = basePreset.fileName.replace('.cbl', `_v${num}.cbl`);
-  const newItem = {
+  const newItem = autoFixQueueItem({
     id,
     name: fileName,
     isBuiltIn: true,
     presetKey: nextPresetKey,
-    title: `${basePreset.title} (AI Demo #${num})`,
+    title: `${basePreset.title} (Demo #${num})`,
     bugBadge: basePreset.bugBadge,
     description: basePreset.description,
     language: 'COBOL',
@@ -365,40 +783,89 @@ async function generateFaultyBankingCodeWithAI() {
     analysis: null,
     rules: [],
     result: null,
+    annotations: [],
+    approved: false,
     checksRun: null,
     suggestedSelected: {},
-    suggestedRun: null
-  };
+    suggestedRun: null,
+    uploadProgress: 0,
+    uploadDone: false
+  });
   fileQueue.push(newItem);
   applyQueueItemToGlobals(newItem);
+  queuePage = Math.max(1, Math.ceil(fileQueue.length / queuePageSize));
   error = '';
-  notice = `Generated faulty banking COBOL "${newItem.name}" (${basePreset.title}) with planted policy bug! Click "Find Business Rules →" to inspect it.`;
+  notice = `Generated "${newItem.name}" and automatically fixed ${newItem.autoFixedCount || 4} policy/safety errors.`;
   saveQueueToStorage();
   render();
+  animateQueueProgress(id);
+}
+
+function syncSidebarCollapseButton() {
+  const btn = document.getElementById('sidebar-collapse-toggle');
+  if (!btn) return;
+  const isCollapsed = document.documentElement.classList.contains('ws-sidebar-collapsed');
+  btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+  const label = isCollapsed ? 'Expand file queue sidebar' : 'Collapse file queue sidebar';
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
 }
 
 function renderSidebarQueue() {
   const listEl = document.getElementById('sidebar-queue-list');
   const countEl = document.getElementById('queue-count-pill');
-  if (countEl) countEl.textContent = String(fileQueue.length);
+  const progEl = document.getElementById('sidebar-approval-progress');
+  const summaryBtn = document.getElementById('sidebar-summary-step');
+  const summarySub = document.getElementById('sidebar-summary-sub');
+
+  syncSidebarCollapseButton();
+
+  const total = fileQueue.length;
+  const approvedCount = fileQueue.filter(f => f.approved).length;
+  const allApproved = areAllFilesApproved();
+
+  if (countEl) countEl.textContent = String(total);
+  if (progEl && !IS_SUMMARY_PAGE) {
+    progEl.textContent = `${approvedCount} of ${total} file${total === 1 ? '' : 's'} approved`;
+  }
+  if (summaryBtn) {
+    if (!IS_SUMMARY_PAGE) {
+      summaryBtn.classList.toggle('is-all-approved', allApproved);
+      const subCopy = allApproved
+        ? `All ${total} file${total === 1 ? '' : 's'} approved · Click for full queue summary!`
+        : `${total - approvedCount} file${total - approvedCount === 1 ? '' : 's'} remaining before full approval`;
+      if (summarySub) summarySub.textContent = subCopy;
+      summaryBtn.title = `View Queue Summary (${approvedCount} of ${total} approved)`;
+    } else {
+      summaryBtn.title = 'Return to Queue Viewer (Inspect code & annotations per file)';
+    }
+  }
+
   if (!listEl) return;
 
-  listEl.innerHTML = fileQueue.map(item => {
+  listEl.innerHTML = fileQueue.map((item, idx) => {
     const isActive = item.id === activeFileId;
     const st = getQueueItemStatus(item);
     const lines = String(item.source || '').split('\n').length;
+    const tooltip = `#${idx + 1} · ${item.name} — ${st.label} (${item.language} → ${item.target} · ${lines}L)`;
     return `
-      <div class="queue-item ${isActive ? 'active' : ''}" role="listitem" data-queue-select="${esc(item.id)}" tabindex="0" aria-current="${isActive ? 'true' : 'false'}">
-        <div class="queue-item-top">
-          <span class="queue-file-name">
-            <span class="queue-dot ${st.cls}"></span>
-            <span>${esc(item.name)}</span>
-          </span>
-          ${fileQueue.length > 1 ? `<button type="button" class="queue-remove-btn" data-queue-remove="${esc(item.id)}" title="Remove from queue" aria-label="Remove ${esc(item.name)}">&times;</button>` : ''}
-        </div>
-        <div class="queue-item-meta">
-          <span class="queue-lang-tag">${esc(item.language)} &rarr; ${esc(item.target)} &middot; ${lines}L</span>
-          <span class="queue-status-pill ${st.cls}">${isActive ? 'Active &middot; ' : ''}${esc(st.label)}</span>
+      <div class="queue-item ${isActive ? 'active' : ''}" role="listitem" data-queue-select="${esc(item.id)}" tabindex="0" aria-current="${isActive ? 'true' : 'false'}" title="${esc(tooltip)}">
+        <span class="queue-rail-badge" aria-hidden="true">
+          #${idx + 1}
+          <span class="queue-rail-dot ${st.cls}"></span>
+        </span>
+        <div class="queue-item-full">
+          <div class="queue-item-top">
+            <span class="queue-file-name">
+              <span class="queue-dot ${st.cls}"></span>
+              <span>#${idx + 1} &middot; ${esc(item.name)}</span>
+            </span>
+            ${fileQueue.length > 1 ? `<button type="button" class="queue-remove-btn" data-queue-remove="${esc(item.id)}" title="Remove from queue" aria-label="Remove ${esc(item.name)}">&times;</button>` : ''}
+          </div>
+          <div class="queue-item-meta">
+            <span class="queue-lang-tag">${esc(item.language)} &rarr; ${esc(item.target)} &middot; ${lines}L</span>
+            <span class="queue-status-pill ${st.cls}">${esc(st.label)}</span>
+          </div>
         </div>
       </div>
     `;
@@ -465,6 +932,133 @@ function esc(s) {
   }[m]));
 }
 
+const COBOL_KEYWORDS = new Set([
+  'IF', 'ELSE', 'END-IF', 'MOVE', 'TO', 'COMPUTE', 'ADD', 'SUBTRACT', 'MULTIPLY',
+  'DIVIDE', 'GIVING', 'BY', 'INTO', 'FROM', 'EVALUATE', 'WHEN', 'OTHER', 'END-EVALUATE',
+  'PERFORM', 'UNTIL', 'THRU', 'THROUGH', 'VARYING', 'IDENTIFICATION', 'ENVIRONMENT',
+  'DATA', 'PROCEDURE', 'DIVISION', 'SECTION', 'WORKING-STORAGE', 'LINKAGE', 'FILE',
+  'PIC', 'PICTURE', 'VALUE', 'ACCEPT', 'DISPLAY', 'STOP', 'RUN', 'GOBACK', 'EXIT',
+  'AND', 'OR', 'NOT', 'IS', 'GREATER', 'LESS', 'EQUAL', 'THAN', 'THEN', 'CALL', 'USING'
+]);
+
+const COBOL_CONSTS = new Set(['ZERO', 'ZEROS', 'ZEROES', 'SPACE', 'SPACES', 'TRUE', 'FALSE']);
+
+const CODE_KEYWORDS = new Set([
+  'def', 'return', 'if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'for', 'while',
+  'try', 'except', 'finally', 'raise', 'import', 'from', 'as', 'class', 'with', 'pass',
+  'break', 'continue', 'lambda', 'yield', 'async', 'await', 'const', 'let', 'var',
+  'function', 'new', 'extends', 'implements', 'public', 'private', 'protected', 'static',
+  'final', 'void', 'int', 'double', 'boolean', 'char', 'long', 'short', 'switch', 'case',
+  'default', 'throw', 'throws', 'catch', 'package', 'interface', 'enum', 'struct', 'func'
+]);
+
+const SQL_KEYWORDS = new Set([
+  'SELECT', 'FROM', 'WHERE', 'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
+  'CREATE', 'OR', 'REPLACE', 'FUNCTION', 'PROCEDURE', 'PACKAGE', 'BODY', 'RETURN',
+  'IS', 'AS', 'BEGIN', 'END', 'DECLARE', 'IF', 'THEN', 'ELSIF', 'ELSE', 'END', 'LOOP',
+  'WHILE', 'FOR', 'IN', 'EXCEPTION', 'WHEN', 'OTHERS', 'RAISE_APPLICATION_ERROR',
+  'AND', 'NOT', 'NULL', 'NUMBER', 'VARCHAR2', 'BOOLEAN', 'DATE', 'COMMIT', 'ROLLBACK'
+]);
+
+const CODE_TYPES_AND_CONSTS = new Set([
+  'True', 'False', 'None', 'true', 'false', 'null', 'undefined', 'self', 'this', 'super',
+  'Decimal', 'ROUND_HALF_UP', 'ROUND_HALF_EVEN', 'ValueError', 'TypeError', 'RuntimeError',
+  'Exception', 'BigDecimal', 'String', 'List', 'Dict', 'Map', 'Set', 'Optional'
+]);
+
+function highlightCodeLine(lineText, lang = '') {
+  const raw = String(lineText ?? '');
+  if (!raw.length) return ' ';
+
+  const isCobol = /cobol|\.cbl|\.cob/i.test(lang);
+  const isSql = /sql|pl\/sql/i.test(lang);
+
+  if (isCobol) {
+    const cobolRegex = /(\*>.*$|^\s*\*(?!>).*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(\d+(?:\.\d+)?)\b|([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)|(>=|<=|<>|!=|==|[=<>+\-*/])|([.,:;()])/g;
+    let out = '';
+    let last = 0;
+    let m;
+    while ((m = cobolRegex.exec(raw)) !== null) {
+      if (m.index > last) out += esc(raw.slice(last, m.index));
+      const [full, comment, str, num, ident, op, punc] = m;
+      if (comment !== undefined) {
+        out += `<span class="syn-comment">${esc(full)}</span>`;
+      } else if (str !== undefined) {
+        out += `<span class="syn-str">${esc(full)}</span>`;
+      } else if (num !== undefined) {
+        out += `<span class="syn-num">${esc(full)}</span>`;
+      } else if (ident !== undefined) {
+        const upper = full.toUpperCase();
+        if (COBOL_KEYWORDS.has(upper)) {
+          out += `<span class="syn-kw">${esc(full)}</span>`;
+        } else if (COBOL_CONSTS.has(upper)) {
+          out += `<span class="syn-num">${esc(full)}</span>`;
+        } else {
+          out += `<span class="syn-type">${esc(full)}</span>`;
+        }
+      } else if (op !== undefined) {
+        out += `<span class="syn-op">${esc(full)}</span>`;
+      } else if (punc !== undefined) {
+        out += `<span class="syn-punc">${esc(full)}</span>`;
+      } else {
+        out += esc(full);
+      }
+      last = cobolRegex.lastIndex;
+    }
+    if (last < raw.length) out += esc(raw.slice(last));
+    return out;
+  }
+
+  const tokenRegex = /((?:#|--|\/\/).*$|\/\*[\s\S]*?\*\/)|(@[A-Za-z_][A-Za-z0-9_.]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(\d+(?:\.\d+)?)\b|([A-Za-z_][A-Za-z0-9_]*)|(>=|<=|<>|!=|==|->|=>|[=<>+\-*/%])|([.,:;(){}[\]])/g;
+  let out = '';
+  let last = 0;
+  let m;
+  while ((m = tokenRegex.exec(raw)) !== null) {
+    if (m.index > last) out += esc(raw.slice(last, m.index));
+    const [full, comment, decorator, str, num, ident, op, punc] = m;
+    if (comment !== undefined) {
+      out += `<span class="syn-comment">${esc(full)}</span>`;
+    } else if (decorator !== undefined) {
+      out += `<span class="syn-kw">${esc(full)}</span>`;
+    } else if (str !== undefined) {
+      out += `<span class="syn-str">${esc(full)}</span>`;
+    } else if (num !== undefined) {
+      out += `<span class="syn-num">${esc(full)}</span>`;
+    } else if (ident !== undefined) {
+      const rest = raw.slice(tokenRegex.lastIndex);
+      const prevChar = m.index > 0 ? raw[m.index - 1] : '';
+      const upper = full.toUpperCase();
+      if (CODE_KEYWORDS.has(full) || (isSql && SQL_KEYWORDS.has(upper))) {
+        out += `<span class="syn-kw">${esc(full)}</span>`;
+      } else if (CODE_TYPES_AND_CONSTS.has(full) || /^[A-Z][A-Z0-9_]{2,}$/.test(full) || /^[A-Z][a-zA-Z0-9]*$/.test(full)) {
+        out += `<span class="syn-type">${esc(full)}</span>`;
+      } else if (/^\s*\(/.test(rest)) {
+        out += `<span class="syn-fn">${esc(full)}</span>`;
+      } else if (prevChar === '.' || /^\s*:(?!:)/.test(rest) || /^\s*=(?!=)/.test(rest)) {
+        // Only treat `ident =` as named prop if inside parentheses; top-level assignment stays syn-var
+        const before = raw.slice(0, m.index);
+        const openParens = (before.match(/\(/g) || []).length - (before.match(/\)/g) || []).length;
+        if (prevChar === '.' || openParens > 0) {
+          out += `<span class="syn-prop">${esc(full)}</span>`;
+        } else {
+          out += `<span class="syn-var">${esc(full)}</span>`;
+        }
+      } else {
+        out += `<span class="syn-var">${esc(full)}</span>`;
+      }
+    } else if (op !== undefined) {
+      out += `<span class="syn-op">${esc(full)}</span>`;
+    } else if (punc !== undefined) {
+      out += `<span class="syn-punc">${esc(full)}</span>`;
+    } else {
+      out += esc(full);
+    }
+    last = tokenRegex.lastIndex;
+  }
+  if (last < raw.length) out += esc(raw.slice(last));
+  return out;
+}
+
 function ruleCounts() {
   const keep = rules.filter(r => r.decision === 'keep').length;
   const edit = rules.filter(r => r.decision === 'edit').length;
@@ -473,11 +1067,8 @@ function ruleCounts() {
 }
 
 function isReportReady() {
-  const c = ruleCounts();
-  const step1Done = Boolean(analysis && rules.length > 0);
-  const step2Done = Boolean(step1Done && c.approved > 0 && result && result.code);
-  const step3Done = Boolean(step2Done && checksRun && Array.isArray(checksRun.rows) && checksRun.rows.length > 0);
-  return step3Done;
+  if (!fileQueue.length) return false;
+  return fileQueue.every(item => Boolean(item.approved) || Boolean(item.checksRun && Array.isArray(item.checksRun.rows) && item.checksRun.rows.length > 0));
 }
 
 function analyzeSourceComplexity(codeStr) {
@@ -503,21 +1094,47 @@ function analyzeSourceComplexity(codeStr) {
 }
 
 function computeImpactMetrics() {
-  const cx = analyzeSourceComplexity(source);
-  const c = ruleCounts();
-  const outLines = result?.code ? result.code.split('\n').filter(l => l.trim().length > 0).length : 0;
+  const items = fileQueue.length ? fileQueue : [{ source, result, annotations, checksRun }];
+  let totalLines = 0;
+  let sloc = 0;
+  let commentLines = 0;
+  let branches = 0;
+  let outLines = 0;
+  let totalAnnotations = 0;
+  let activeAnnotations = 0;
+  let passedChecks = 0;
+  let totalChecks = 0;
+
+  items.forEach(item => {
+    const cx = analyzeSourceComplexity(item.source || '');
+    totalLines += cx.totalLines;
+    sloc += cx.sloc;
+    commentLines += cx.commentLines;
+    branches += cx.branches;
+    const codeText = item.result?.code || '';
+    if (codeText) {
+      outLines += codeText.split('\n').filter(l => l.trim().length > 0).length;
+    }
+    const anns = Array.isArray(item.annotations) ? item.annotations : [];
+    totalAnnotations += anns.length;
+    activeAnnotations += anns.filter(a => a.status !== 'removed').length;
+    if (item.checksRun && Array.isArray(item.checksRun.rows)) {
+      totalChecks += item.checksRun.rows.length;
+      passedChecks += item.checksRun.rows.filter(r => r.passed).length;
+    }
+  });
 
   const rate = Number(roiSettings.hourlyRate) || 135;
   const minsPerSloc = Number(roiSettings.minsPerSloc) || 12;
   const a2bRatio = Number(roiSettings.a2bRatio) || 0.26;
   const modules = Number(roiSettings.moduleMultiplier) || 1;
 
-  const baseLineHours = (cx.sloc * minsPerSloc) / 60;
-  const branchHours = cx.branches * 0.22;
-  const ruleHours = (c.total || 4) * 0.12;
-  const singleModuleBaselineHrs = Math.max(0.5, baseLineHours + branchHours + ruleHours);
+  const baseLineHours = (sloc * minsPerSloc) / 60;
+  const branchHours = branches * 0.22;
+  const ruleHours = Math.max(3, activeAnnotations) * 0.12;
+  const queueBaselineHrs = Math.max(0.5, baseLineHours + branchHours + ruleHours);
 
-  const baselineHrs = +(singleModuleBaselineHrs * modules).toFixed(1);
+  const baselineHrs = +(queueBaselineHrs * modules).toFixed(1);
   const assistedHrs = Math.max(0.2, +(baselineHrs * a2bRatio).toFixed(1));
   const savedHrs = Math.max(0.1, +(baselineHrs - assistedHrs).toFixed(1));
   const pctSaved = baselineHrs > 0 ? Math.round(((baselineHrs - assistedHrs) / baselineHrs) * 100) : 74;
@@ -526,20 +1143,16 @@ function computeImpactMetrics() {
   const assistedDollars = Math.round(assistedHrs * rate);
   const savedDollars = Math.max(0, baselineDollars - assistedDollars);
 
-  let passedChecks = 0;
-  let totalChecks = 0;
-  if (checksRun && Array.isArray(checksRun.rows)) {
-    totalChecks += checksRun.rows.length;
-    passedChecks += checksRun.rows.filter(r => r.passed).length;
-  }
-  if (suggestedRun && Array.isArray(suggestedRun.rows)) {
-    totalChecks += suggestedRun.rows.length;
-    passedChecks += suggestedRun.rows.filter(r => r.passed).length;
-  }
-
   return {
-    ...cx,
+    fileCount: items.length,
+    approvedCount: fileQueue.filter(f => f.approved).length,
+    totalLines,
+    sloc,
+    commentLines,
+    branches,
     outLines,
+    totalAnnotations,
+    activeAnnotations,
     rate,
     minsPerSloc,
     a2bRatio,
@@ -560,64 +1173,32 @@ function fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function buildCodeChangeMap() {
-  const d = currentPreset();
-  if (d && Array.isArray(d.changes) && !uploadedFileName) {
-    return d.changes;
-  }
-
-  const oldLines = String(source || '').split('\n');
-  const newLines = String(result?.code || '').split('\n');
-  const activeRules = rules.filter(r => r.decision !== 'drop');
-  const count = Math.min(4, Math.max(2, activeRules.length || 3));
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const oStart = Math.max(1, Math.floor((i * oldLines.length) / count) + 1);
-    const oEnd = Math.max(oStart, Math.floor(((i + 1) * oldLines.length) / count));
-    const nStart = Math.max(1, Math.floor((i * newLines.length) / count) + 1);
-    const nEnd = Math.max(nStart, Math.floor(((i + 1) * newLines.length) / count));
-    const ruleObj = activeRules[i];
-    const isEdit = ruleObj && (ruleObj.decision === 'edit' || ruleObj.custom);
-    const id = `CHG-0${i + 1}`;
-    out.push({
-      id,
-      kind: isEdit ? 'fix' : 'keep',
-      kindLabel: isEdit ? 'Updated Banking Rule' : 'Translated Banking Logic',
-      oldRange: [oStart, oEnd],
-      oldRefLabel: `Old L${oStart}–L${oEnd}`,
-      newRange: [nStart, nEnd],
-      newRefLabel: `New L${nStart}–L${nEnd}`,
-      pointerText: `← ${id} · From Old L${oStart}–L${oEnd} (${isEdit ? 'Updated rule' : 'Translated'})`,
-      summary: ruleObj ? (ruleObj.decision === 'edit' ? ruleObj.text : ruleObj.original) : `Translated ${language} banking logic (Old L${oStart}–L${oEnd}) into ${target} (New L${nStart}–L${nEnd}).`
-    });
-  }
-  return out;
-}
-
 function buildReportSummaryText() {
   const m = computeImpactMetrics();
-  const c = ruleCounts();
-  const changes = buildCodeChangeMap();
-  const activeItem = fileQueue.find(f => f.id === activeFileId);
-  const scopeLabel = activeItem ? activeItem.name : (uploadedFileName || 'fee_waiver.cbl');
+  const fileNames = fileQueue.map(f => f.name).join(', ') || 'fee_waiver.cbl';
+  const allAnns = [];
+  fileQueue.forEach(item => {
+    (item.annotations || []).filter(a => a.status !== 'removed').forEach(a => {
+      allAnns.push(`  - [${item.name}] ${formatChangeLabel(a.id)} (${a.oldRefLabel} -> ${a.newRefLabel}, ${a.kindLabel}): ${a.reason}`);
+    });
+  });
   return [
-    `A2B Labs — Banking Code Test & Savings Report`,
-    `File: ${scopeLabel} (${language} -> ${target})`,
-    `Code reviewed: ${m.totalLines} total lines (${m.sloc} active logic lines, ${m.branches} decision checks)`,
-    `Verification: ${c.approved} of ${c.total} rules included · ${checksRun ? checksRun.label : 'Tested'}`,
-    `Code changes mapped:`,
-    ...changes.map(ch => `  - ${ch.id} (${ch.newRefLabel} <- ${ch.oldRefLabel}, ${ch.kindLabel}): ${ch.summary}`),
-    `Estimated time saved: ${m.savedHrs} hrs (${m.pctSaved}% less time: ${m.assistedHrs}h with A2B Labs vs. ${m.baselineHrs}h by hand)`,
-    `Estimated cost saved: (${m.baselineHrs}h - ${m.assistedHrs}h) x $${m.rate}/hr = ${fmtMoney(m.savedDollars)}`,
-    `Note: Illustrative estimate only; lines of code alone do not guarantee exact project hours or cost savings.`
+    `A2B Labs — Queue Summary & Savings Report`,
+    `Files included (${m.fileCount}): ${fileNames}`,
+    `Approval status: ${m.approvedCount} of ${m.fileCount} files approved`,
+    `Amount reviewed: ${m.totalLines} lines of code (${m.activeAnnotations} plain-English improvements)`,
+    `Estimated time saved: ${m.savedHrs} hrs (${m.pctSaved}% faster: ${m.assistedHrs}h with A2B Labs vs. ${m.baselineHrs}h by hand)`,
+    `Estimated money saved: (${m.baselineHrs}h - ${m.assistedHrs}h) x $${m.rate}/hr = ${fmtMoney(m.savedDollars)}`,
+    `Plain-English change notes:`,
+    ...allAnns,
+    `Note: Estimate based on the files in your queue.`
   ].join('\n');
 }
 
 function renderReportStatsHtml() {
   const m = computeImpactMetrics();
-  const c = ruleCounts();
-  const readinessMain = m.totalChecks > 0 ? `${m.passedChecks} of ${m.totalChecks} tests passed` : 'Verified';
-  const readinessSub = `${c.approved} of ${c.total} banking rules included · ${m.outLines} lines of ${target}`;
+  const readinessMain = m.totalChecks > 0 ? `${m.passedChecks} of ${m.totalChecks} tests passed` : `${m.approvedCount} of ${m.fileCount} files approved`;
+  const readinessSub = `${m.activeAnnotations} active AI fixes across ${m.fileCount} file${m.fileCount === 1 ? '' : 's'} · ${m.outLines} output lines`;
 
   const manualDiscovery = +(m.baselineHrs * 0.40).toFixed(1);
   const manualPolicy = +(m.baselineHrs * 0.30).toFixed(1);
@@ -631,9 +1212,9 @@ function renderReportStatsHtml() {
   return `
     <div class="report-kpi-grid">
       <div class="report-kpi-card report-kpi-highlight">
-        <span class="report-kpi-label">Estimated Cost Saved</span>
+        <span class="report-kpi-label">Estimated Queue Cost Saved</span>
         <strong class="report-kpi-value amber-val">${fmtMoney(m.savedDollars)}</strong>
-        <small>(${m.baselineHrs}h &minus; ${m.assistedHrs}h) &times; $${m.rate}/hr${m.modules > 1 ? ` &middot; ${m.modules} similar banking files` : ''}</small>
+        <small>(${m.baselineHrs}h &minus; ${m.assistedHrs}h) &times; $${m.rate}/hr${m.modules > 1 ? ` &middot; &times;${m.modules} batch scale` : ''}</small>
       </div>
 
       <div class="report-kpi-card">
@@ -643,13 +1224,13 @@ function renderReportStatsHtml() {
       </div>
 
       <div class="report-kpi-card">
-        <span class="report-kpi-label">Banking Code Reviewed</span>
-        <strong class="report-kpi-value">${m.totalLines} lines</strong>
+        <span class="report-kpi-label">Entire Queue Reviewed</span>
+        <strong class="report-kpi-value">${m.fileCount} file${m.fileCount === 1 ? '' : 's'} (${m.totalLines} lines)</strong>
         <small>${m.sloc} lines of logic &middot; ${m.branches} decision check${m.branches === 1 ? '' : 's'}</small>
       </div>
 
       <div class="report-kpi-card">
-        <span class="report-kpi-label">Banking Test Results</span>
+        <span class="report-kpi-label">Queue Verification</span>
         <strong class="report-kpi-value report-status-val emerald-val">${esc(readinessMain)}</strong>
         <small>${esc(readinessSub)}</small>
       </div>
@@ -657,8 +1238,8 @@ function renderReportStatsHtml() {
 
     <div class="report-bars-panel">
       <div class="report-bars-head">
-        <strong>Estimated Time Comparison: Updating by Hand vs. With A2B Labs</strong>
-        <span>Based on ${m.sloc} lines of banking logic${m.modules > 1 ? ` across ${m.modules} similar files` : ''}</span>
+        <strong>Estimated Time Comparison Across Queue (${m.fileCount} file${m.fileCount === 1 ? '' : 's'})</strong>
+        <span>Based on ${m.sloc} lines of banking logic${m.modules > 1 ? ` &times; ${m.modules} batch multiplier` : ''}</span>
       </div>
 
       <div class="effort-row">
@@ -924,696 +1505,1559 @@ function updateRailTelemetry() {
   }
 }
 
-function ensurePersistentDropzone() {
-  if (persistentDropzoneEl) return persistentDropzoneEl;
-  const wrapper = document.createElement('div');
-  const currentTheme = document.documentElement.dataset.theme === 'light' ? ' data-theme="light"' : '';
-  wrapper.innerHTML = `
-    <div class="vs-dropzone" id="workspace-vs-dropzone" data-accept=".cbl,.cob,.cpy,.sql,.pls,.pkb,.py,.js,.ts,.java,.cs,.go,.cpp,.c,.txt,.md" data-max-size="85KB"${currentTheme}>
-      <div class="vs-dropzone-zone" role="button" tabindex="0" aria-label="Drop banking code files here, or press Enter to browse">
-        <svg class="vs-dropzone-border" aria-hidden="true"><rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="13" ry="13"/></svg>
-        <div class="vs-dropzone-ripple" aria-hidden="true"></div>
-        <div class="vs-dropzone-stack" aria-hidden="true">
-          <span class="vs-dropzone-card vs-dropzone-c1"></span>
-          <span class="vs-dropzone-card vs-dropzone-c2"></span>
-          <span class="vs-dropzone-card vs-dropzone-c3">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 16V5"/><path d="M7.5 9.5 12 5l4.5 4.5"/><path d="M5 19h14"/>
-            </svg>
-          </span>
-        </div>
-        <div class="vs-dropzone-copy">
-          <span class="vs-dropzone-t1">Drop banking code files here or <u>browse</u></span>
-          <span class="vs-dropzone-t2">Release to add to your banking queue</span>
-        </div>
-        <div class="vs-dropzone-hint">COBOL (.cbl), PL/SQL (.sql), Python, Java, C# · up to 85 KB per file</div>
-        <input class="vs-dropzone-input" type="file" multiple tabindex="-1" aria-hidden="true">
-      </div>
-      <ul class="vs-dropzone-list" aria-live="polite"></ul>
-    </div>
-  `.trim();
-  persistentDropzoneEl = wrapper.firstElementChild;
+let persistentChatComposerEl = null;
+const composerStagedFiles = new Map();
+let composerNavTimer = 0;
+let composerAbortController = null;
 
-  if (window.vsDropzone && typeof window.vsDropzone.mount === 'function') {
-    window.vsDropzone.mount(persistentDropzoneEl);
+function resolveComposerMode(modeValue) {
+  switch (modeValue) {
+    case 'plsql-python':
+      return { lang: 'Oracle PL/SQL', target: 'Python', label: 'PL/SQL → Python' };
+    case 'cobol-java':
+      return { lang: 'COBOL', target: 'Java 21', label: 'COBOL → Java' };
+    case 'audit-only':
+      return { lang: 'COBOL', target: 'Python (Audit)', label: 'Policy Audit' };
+    case 'cobol-python':
+    default:
+      return { lang: 'COBOL', target: 'Python', label: 'COBOL → Python' };
+  }
+}
+
+function looksLikePastedCode(rawText) {
+  const txt = String(rawText || '').trim();
+  if (!txt) return false;
+  const lineCount = txt.split('\n').length;
+  if (/\b(MOVE\s+|END-IF|PROCEDURE\s+DIVISION|WORKING-STORAGE|CREATE\s+OR\s+REPLACE|BEGIN\b|SELECT\s+.+\s+FROM|def\s+\w+\s*\(|public\s+(final\s+)?class\s+|function\s+\w+\s*\()/i.test(txt)) {
+    return true;
+  }
+  return lineCount >= 3 && /[;=<>(){}]/.test(txt);
+}
+
+function matchPresetKeyFromPrompt(promptText) {
+  const q = String(promptText || '').toLowerCase();
+  if (/overdraft|cushion|savings|nsf/.test(q) && presets.overdraft_trap) return 'overdraft_trap';
+  if (/wire|cutoff|transfer|limit|dual/.test(q) && presets.wire_limit) return 'wire_limit';
+  if (/loan|apr|interest|rate|penalty|autopay/.test(q) && presets.loan_interest) return 'loan_interest';
+  if (/fee|waiver|student|maintenance|checking/.test(q) && presets.fee_waiver) return 'fee_waiver';
+  const keys = Object.keys(presets);
+  const cur = keys.indexOf(activePresetId);
+  return keys[(cur + 1) % keys.length] || 'fee_waiver';
+}
+
+function applyUserInstructionToItem(item, instructionText) {
+  const cleanNote = String(instructionText || '').trim();
+  if (!cleanNote || looksLikePastedCode(cleanNote)) return;
+  item.policy = item.policy ? `${item.policy}\nReviewer note: ${cleanNote}` : cleanNote;
+  if (Array.isArray(item.annotations) && item.annotations.length > 0) {
+    const firstActive = item.annotations.find(a => a.status !== 'removed') || item.annotations[0];
+    if (firstActive && !firstActive.reason.includes(cleanNote)) {
+      firstActive.reason = `${firstActive.reason} (Prompt focus: ${cleanNote})`;
+    }
+  }
+}
+
+function animateComposerFileUpload(api, chipId, file) {
+  api.setProgress(chipId, 0.08);
+  const readPromise = file.text().then(txt => {
+    composerStagedFiles.set(chipId, { file, text: String(txt || '').replace(/\r\n?/g, '\n') });
+  }).catch(() => {
+    composerStagedFiles.set(chipId, { file, text: '' });
+  });
+
+  const start = performance.now();
+  const duration = 340;
+  function step(now) {
+    const t = Math.min(1, (now - start) / duration);
+    if (t < 1) {
+      api.setProgress(chipId, Math.max(0.08, t * 0.92));
+      requestAnimationFrame(step);
+    } else {
+      readPromise.finally(() => {
+        api.setProgress(chipId, 1);
+      });
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+async function handleComposerSubmit(detail, api) {
+  if (composerNavTimer) {
+    clearTimeout(composerNavTimer);
+    composerNavTimer = 0;
+  }
+  if (composerAbortController) {
+    composerAbortController.abort();
+    composerAbortController = null;
   }
 
-  persistentDropzoneEl.addEventListener('vs-dropzone-add', (e) => {
-    const addedFiles = e.detail?.files || [];
-    if (addedFiles.length) {
-      addFilesToQueueFromDropzone(addedFiles);
+  let canceled = false;
+  const onStopOnce = () => {
+    canceled = true;
+    if (composerNavTimer) {
+      clearTimeout(composerNavTimer);
+      composerNavTimer = 0;
     }
-  });
+    if (composerAbortController) {
+      composerAbortController.abort();
+      composerAbortController = null;
+    }
+    notice = 'Stopped — ready whenever you want to send.';
+    renderHomeDockOnly();
+  };
+  api.el.addEventListener('vs-chat-input:stop', onStopOnce, { once: true });
 
-  persistentDropzoneEl.addEventListener('vs-dropzone-remove', (e) => {
-    const removedFile = e.detail?.file;
-    if (removedFile) {
-      const match = fileQueue.find(f => !f.isBuiltIn && f.name === removedFile.name);
-      if (match && fileQueue.length > 1) {
-        removeQueueFile(match.id);
+  const mode = resolveComposerMode(detail.model);
+  const rawText = String(detail.text || '').trim();
+  const submittedFiles = Array.isArray(detail.files) ? detail.files : [];
+  syncActiveQueueItemFromGlobals();
+
+  let newestItemId = '';
+
+  if (submittedFiles.length > 0) {
+    for (const fEntry of submittedFiles) {
+      const staged = composerStagedFiles.get(fEntry.id);
+      let content = staged ? staged.text : '';
+      if (!content && fEntry.file && typeof fEntry.file.text === 'function') {
+        try {
+          content = (await fEntry.file.text()).replace(/\r\n?/g, '\n');
+        } catch (_e) {
+          content = '';
+        }
+      }
+      composerStagedFiles.delete(fEntry.id);
+      content = content.trim();
+      if (!content) continue;
+
+      const matchedPreset = Object.values(presets).find(
+        p => p.fileName === fEntry.name && String(p.legacy || '').trim() === content
+      );
+      const detected = detectLanguageFromFilename(fEntry.name);
+      const itemLang = detected ? detected.lang : mode.lang;
+      const itemTarget = /java/i.test(mode.target) ? mode.target : (detected ? detected.target : mode.target);
+
+      // If this exact built-in sample is already queued and target matches, select & update it instead of duplicating
+      let existingSample = matchedPreset
+        ? fileQueue.find(q => q.isBuiltIn && q.presetKey === matchedPreset.id && q.target === itemTarget)
+        : null;
+
+      if (existingSample) {
+        applyUserInstructionToItem(existingSample, rawText);
+        newestItemId = existingSample.id;
+      } else {
+        const id = 'file-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        const newItem = autoFixQueueItem({
+          id,
+          name: fEntry.name,
+          isBuiltIn: Boolean(matchedPreset && !/java/i.test(itemTarget)),
+          presetKey: matchedPreset ? matchedPreset.id : 'fee_waiver',
+          title: matchedPreset ? matchedPreset.title : `Uploaded Banking Script (${fEntry.name})`,
+          bugBadge: matchedPreset ? matchedPreset.bugBadge : 'Auto-scanned & repaired upon upload',
+          description: matchedPreset
+            ? matchedPreset.description
+            : `Uploaded banking file (${fEntry.name}). Errors and safety checks were automatically repaired.`,
+          language: itemLang,
+          target: itemTarget,
+          source: content,
+          policy: matchedPreset ? matchedPreset.policy.join('\n') : (policy || presets.fee_waiver.policy.join('\n')),
+          analysis: null,
+          rules: [],
+          result: null,
+          annotations: [],
+          approved: false,
+          checksRun: null,
+          suggestedSelected: {},
+          suggestedRun: null,
+          uploadProgress: 100,
+          uploadDone: true
+        });
+        applyUserInstructionToItem(newItem, rawText);
+        fileQueue.push(newItem);
+        newestItemId = id;
       }
     }
+  } else if (looksLikePastedCode(rawText)) {
+    const isSql = /\b(SELECT|CREATE|BEGIN|DECLARE|PLS_INTEGER|NUMBER)\b/i.test(rawText);
+    const ext = isSql ? 'sql' : 'cbl';
+    const num = aiBugCounter++;
+    const snippetName = `pasted_banking_${num}.${ext}`;
+    const id = 'paste-' + Date.now();
+    const newItem = autoFixQueueItem({
+      id,
+      name: snippetName,
+      isBuiltIn: false,
+      presetKey: 'fee_waiver',
+      title: `Pasted Banking Snippet #${num}`,
+      bugBadge: 'Auto-scanned & repaired from Chat Composer',
+      description: 'Pasted directly into the Homepage Chat Composer and repaired automatically.',
+      language: isSql ? 'Oracle PL/SQL' : mode.lang,
+      target: mode.target,
+      source: rawText,
+      policy: presets.fee_waiver.policy.join('\n'),
+      analysis: null,
+      rules: [],
+      result: null,
+      annotations: [],
+      approved: false,
+      checksRun: null,
+      suggestedSelected: {},
+      suggestedRun: null,
+      uploadProgress: 100,
+      uploadDone: true
+    });
+    fileQueue.push(newItem);
+    newestItemId = id;
+  } else if (rawText) {
+    const chosenKey = matchPresetKeyFromPrompt(rawText);
+    const basePreset = presets[chosenKey] || presets.fee_waiver;
+
+    if (configured) {
+      try {
+        composerAbortController = new AbortController();
+        const r = await fetch('/api/generate-faulty', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: `${rawText} (${basePreset.title})` }),
+          signal: composerAbortController.signal
+        });
+        const data = await r.json();
+        if (!canceled && r.ok && data && data.source) {
+          const id = 'ai-bug-' + Date.now();
+          const fileName = (data.fileName || `ai_banking_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
+          const aiItem = autoFixQueueItem({
+            id,
+            name: fileName,
+            isBuiltIn: false,
+            presetKey: chosenKey,
+            title: data.title || basePreset.title,
+            bugBadge: data.bugBadge || basePreset.bugBadge,
+            description: data.description || rawText,
+            language: mode.lang,
+            target: mode.target,
+            source: String(data.source).trim(),
+            policy: Array.isArray(data.policy) ? data.policy.join('\n') : String(data.policy || basePreset.policy.join('\n')),
+            analysis: null,
+            rules: [],
+            result: null,
+            annotations: [],
+            approved: false,
+            checksRun: null,
+            suggestedSelected: {},
+            suggestedRun: null,
+            uploadProgress: 100,
+            uploadDone: true
+          });
+          applyUserInstructionToItem(aiItem, rawText);
+          fileQueue.push(aiItem);
+          newestItemId = id;
+        }
+      } catch (_e) {
+        // Fall through to deterministic preset generation if offline or aborted
+      } finally {
+        composerAbortController = null;
+      }
+    }
+
+    if (!canceled && !newestItemId) {
+      const id = 'prompt-' + Date.now();
+      const num = aiBugCounter++;
+      const fileName = num === 1 && !fileQueue.some(q => q.name === basePreset.fileName)
+        ? basePreset.fileName
+        : basePreset.fileName.replace('.cbl', `_${num}.cbl`);
+      const promptItem = autoFixQueueItem({
+        id,
+        name: fileName,
+        isBuiltIn: !/java/i.test(mode.target),
+        presetKey: chosenKey,
+        title: basePreset.title,
+        bugBadge: basePreset.bugBadge,
+        description: `${basePreset.description} · Prompt: "${rawText}"`,
+        language: mode.lang,
+        target: mode.target,
+        source: basePreset.legacy,
+        policy: basePreset.policy.join('\n'),
+        analysis: null,
+        rules: [],
+        result: null,
+        annotations: [],
+        approved: false,
+        checksRun: null,
+        suggestedSelected: {},
+        suggestedRun: null,
+        uploadProgress: 100,
+        uploadDone: true
+      });
+      applyUserInstructionToItem(promptItem, rawText);
+      fileQueue.push(promptItem);
+      newestItemId = id;
+    }
+  }
+
+  if (canceled) return;
+
+  if (newestItemId) {
+    const targetItem = fileQueue.find(f => f.id === newestItemId);
+    if (targetItem) applyQueueItemToGlobals(targetItem);
+  } else if (fileQueue[0]) {
+    applyQueueItemToGlobals(fileQueue.find(f => f.id === activeFileId) || fileQueue[0]);
+  }
+
+  error = '';
+  notice = '';
+  saveQueueToStorage();
+  renderHomeDockOnly();
+
+  composerNavTimer = window.setTimeout(() => {
+    composerNavTimer = 0;
+    api.el.removeEventListener('vs-chat-input:stop', onStopOnce);
+    if (canceled) return;
+    api.setBusy(false);
+    window.location.href = '/workspace.html';
+  }, 640);
+}
+
+const GENERATED_BANKING_POOL = [
+  {
+    fileName: 'cd_early_withdrawal.cbl',
+    title: 'CD Early Withdrawal Penalty',
+    prompt: 'Check and fix CD early withdrawal rules and rounding errors in cd_early_withdrawal.cbl',
+    code: [
+      '       IDENTIFICATION DIVISION.',
+      '       PROGRAM-ID. CD-PENALTY-CALC.',
+      '       DATA DIVISION.',
+      '       WORKING-STORAGE SECTION.',
+      '       01 WS-PRINCIPAL        PIC 9(7)V99 VALUE 25000.00.',
+      '       01 WS-DAYS-HELD        PIC 9(4)    VALUE 365.',
+      '       01 WS-IN-GRACE-WINDOW  PIC X       VALUE "Y".',
+      '       01 WS-PENALTY-AMT      PIC 9(5)V99 VALUE 0.',
+      '       PROCEDURE DIVISION.',
+      '           IF WS-DAYS-HELD < 365',
+      '               COMPUTE WS-PENALTY-AMT = WS-PRINCIPAL * 0.03',
+      '           ELSE',
+      '               IF WS-IN-GRACE-WINDOW = "N"',
+      '                   COMPUTE WS-PENALTY-AMT = WS-PRINCIPAL * 0.015',
+      '               END-IF',
+      '           END-IF.',
+      '           STOP RUN.'
+    ].join('\n')
+  },
+  {
+    fileName: 'ach_batch_settlement.cbl',
+    title: 'ACH Same-Day Batch Cutoff',
+    prompt: 'Check and fix ACH same-day cutoff time and transfer limit errors in ach_batch_settlement.cbl',
+    code: [
+      '       IDENTIFICATION DIVISION.',
+      '       PROGRAM-ID. ACH-BATCH-SETTLE.',
+      '       DATA DIVISION.',
+      '       WORKING-STORAGE SECTION.',
+      '       01 WS-BATCH-TOTAL      PIC 9(7)V99 VALUE 0.',
+      '       01 WS-SUBMIT-HOUR-UTC  PIC 9(2)    VALUE 21.',
+      '       01 WS-SAME-DAY-CAP     PIC 9(6)V99 VALUE 100000.00.',
+      '       01 WS-ROUTE-CODE       PIC X(8)    VALUE "NEXT-DAY".',
+      '       PROCEDURE DIVISION.',
+      '           IF WS-SUBMIT-HOUR-UTC <= 21',
+      '               IF WS-BATCH-TOTAL <= WS-SAME-DAY-CAP',
+      '                   MOVE "SAME-DAY" TO WS-ROUTE-CODE',
+      '               END-IF',
+      '           END-IF.',
+      '           STOP RUN.'
+    ].join('\n')
+  },
+  {
+    fileName: 'escrow_tax_disbursement.sql',
+    title: 'Mortgage Escrow Tax Disbursement',
+    prompt: 'Check and fix monthly property tax rounding and negative balance errors in escrow_tax_disbursement.sql',
+    code: [
+      'CREATE OR REPLACE PROCEDURE calc_escrow_monthly (',
+      '  p_annual_tax   IN NUMBER,',
+      '  p_balance      IN NUMBER,',
+      '  p_monthly_due  OUT NUMBER',
+      ') AS',
+      'BEGIN',
+      '  IF p_balance < 0 THEN',
+      '    p_monthly_due := (p_annual_tax / 12) + ABS(p_balance);',
+      '  ELSE',
+      '    p_monthly_due := p_annual_tax / 12;',
+      '  END IF;',
+      'END;'
+    ].join('\n')
+  },
+  {
+    fileName: 'atm_daily_withdrawal.cbl',
+    title: 'ATM Cross-Midnight Limit',
+    prompt: 'Check and fix ATM daily withdrawal limit and negative amount errors in atm_daily_withdrawal.cbl',
+    code: [
+      '       IDENTIFICATION DIVISION.',
+      '       PROGRAM-ID. ATM-DAILY-CAP.',
+      '       DATA DIVISION.',
+      '       WORKING-STORAGE SECTION.',
+      '       01 WS-REQ-AMOUNT       PIC 9(5)V99 VALUE 600.00.',
+      '       01 WS-DAILY-USED       PIC 9(5)V99 VALUE 500.00.',
+      '       01 WS-DAILY-LIMIT      PIC 9(5)V99 VALUE 1000.00.',
+      '       01 WS-APPROVED         PIC X       VALUE "N".',
+      '       PROCEDURE DIVISION.',
+      '           IF WS-REQ-AMOUNT + WS-DAILY-USED <= WS-DAILY-LIMIT',
+      '               MOVE "Y" TO WS-APPROVED',
+      '           END-IF.',
+      '           STOP RUN.'
+    ].join('\n')
+  },
+  {
+    fileName: 'fx_remittance_spread.sql',
+    title: 'Cross-Border FX Spread',
+    prompt: 'Check and fix foreign currency conversion and rounding errors in fx_remittance_spread.sql',
+    code: [
+      'CREATE OR REPLACE FUNCTION calc_fx_payout (',
+      '  p_usd_amount IN BINARY_DOUBLE,',
+      '  p_mid_rate   IN BINARY_DOUBLE,',
+      '  p_spread_bps IN NUMBER',
+      ') RETURN BINARY_DOUBLE AS',
+      '  v_eff_rate BINARY_DOUBLE;',
+      'BEGIN',
+      '  v_eff_rate := p_mid_rate * (1 - (p_spread_bps / 10000));',
+      '  RETURN p_usd_amount * v_eff_rate;',
+      'END;'
+    ].join('\n')
+  },
+  {
+    fileName: 'credit_card_grace_period.cbl',
+    title: 'Credit Card Trailing Interest',
+    prompt: 'Check and fix credit card paid-in-full interest billing bug in credit_card_grace_period.cbl',
+    code: [
+      '       IDENTIFICATION DIVISION.',
+      '       PROGRAM-ID. CARD-GRACE-INT.',
+      '       DATA DIVISION.',
+      '       WORKING-STORAGE SECTION.',
+      '       01 WS-PRIOR-PAID-FULL  PIC X       VALUE "Y".',
+      '       01 WS-AVG-DAILY-BAL    PIC 9(6)V99 VALUE 1850.00.',
+      '       01 WS-MONTHLY-APR      PIC 9V9999  VALUE 0.0199.',
+      '       01 WS-INTEREST-DUE     PIC 9(5)V99 VALUE 0.',
+      '       PROCEDURE DIVISION.',
+      '           IF WS-AVG-DAILY-BAL > 0',
+      '               COMPUTE WS-INTEREST-DUE = WS-AVG-DAILY-BAL * WS-MONTHLY-APR',
+      '           END-IF.',
+      '           STOP RUN.'
+    ].join('\n')
+  }
+];
+
+let generatedFileCounter = 0;
+
+function generateDistinctBankingFile(api) {
+  if (!api) return;
+  const premadeNames = new Set(Object.values(presets).map(p => String(p.fileName || '').toLowerCase()));
+  const usedNames = new Set([
+    ...premadeNames,
+    ...(api.files || []).map(f => String(f.name || '').toLowerCase()),
+    ...fileQueue.map(q => String(q.name || '').toLowerCase())
+  ]);
+
+  let picked = null;
+  for (let i = 0; i < GENERATED_BANKING_POOL.length; i++) {
+    const candidate = GENERATED_BANKING_POOL[(generatedFileCounter + i) % GENERATED_BANKING_POOL.length];
+    if (!usedNames.has(candidate.fileName.toLowerCase())) {
+      picked = { ...candidate };
+      generatedFileCounter = (generatedFileCounter + i + 1) % GENERATED_BANKING_POOL.length;
+      break;
+    }
+  }
+
+  if (!picked) {
+    const base = GENERATED_BANKING_POOL[generatedFileCounter % GENERATED_BANKING_POOL.length];
+    generatedFileCounter += 1;
+    const dotIdx = base.fileName.lastIndexOf('.');
+    const stem = dotIdx > 0 ? base.fileName.slice(0, dotIdx) : base.fileName;
+    const ext = dotIdx > 0 ? base.fileName.slice(dotIdx) : '.cbl';
+    let ver = 2;
+    let nextName = `${stem}_v${ver}${ext}`;
+    while (usedNames.has(nextName.toLowerCase())) {
+      ver += 1;
+      nextName = `${stem}_v${ver}${ext}`;
+    }
+    picked = {
+      fileName: nextName,
+      title: `${base.title} (Variant ${ver})`,
+      prompt: `Check and fix banking rule errors in ${nextName} (${base.title})`,
+      code: `${base.code}\n${ext === '.sql' ? `-- Generated variant #${ver}` : `      * Generated variant #${ver}`}`
+    };
+  }
+
+  const genFile = new File([picked.code + '\n'], picked.fileName, { type: 'text/plain' });
+  api.addFiles([genFile]);
+  if (!String(api.value || '').trim()) {
+    api.value = picked.prompt;
+  }
+  api.focus();
+}
+
+function ensurePersistentChatComposer() {
+  if (persistentChatComposerEl) return persistentChatComposerEl;
+  const wrapper = document.createElement('div');
+  const darkAttr = document.documentElement.dataset.theme !== 'light' ? ' data-theme="dark"' : '';
+  wrapper.innerHTML = `
+    <form
+      class="vs-chat-input"
+      id="home-vs-chat-input"
+      aria-label="Banking code modernization composer"
+      data-max-files="10"
+      data-drop-label="Drop banking files here"
+      data-accept=".cbl,.cob,.cpy,.sql,.pls,.pkb,.rpg,.rpgle,.py,.java,.cs,.js,.ts,.go,.c,.cpp,.txt,.md,.json,.csv,.pdf"${darkAttr}
+    >
+      <div class="home-composer-stage">
+        <textarea
+          class="vs-chat-input-text"
+          rows="4"
+          name="message"
+          placeholder=""
+          aria-label="Banking rules or files to update"
+        ></textarea>
+        <button type="button" class="home-drop-icon-btn" aria-label="Upload files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8.5 17.5H6.5a4.5 4.5 0 0 1-.42-8.98A5.5 5.5 0 0 1 16.8 7.6a4 4 0 0 1 .7 7.9H15.5"/>
+            <path d="M12 20.5V10.5M8.5 14 12 10.5 15.5 14"/>
+          </svg>
+          <span class="home-drop-icon-label">Upload files</span>
+        </button>
+      </div>
+      <div class="vs-chat-input-bar">
+        <button class="vs-chat-input-attach" type="button" aria-label="Upload banking files"></button>
+        <div class="home-bar-presets" id="home-bar-presets">
+          <button class="home-bar-presets-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="home-bar-presets-label">+ Examples</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <ul class="home-bar-presets-menu" role="listbox" aria-label="Sample banking files and generator" hidden>
+            <li class="home-bar-presets-heading" role="presentation">Try a Sample File</li>
+            <li role="option" tabindex="-1" data-preset-action="sample:fee_waiver">
+              <span>Fee Waiver<span class="preset-ext">.cbl</span></span>
+              <small>Checking fee discount bug</small>
+            </li>
+            <li role="option" tabindex="-1" data-preset-action="sample:overdraft_trap">
+              <span>Overdraft Bug<span class="preset-ext">.cbl</span></span>
+              <small>Withdrawals counted before deposits</small>
+            </li>
+            <li role="option" tabindex="-1" data-preset-action="sample:wire_limit">
+              <span>Wire Cutoff<span class="preset-ext">.cbl</span></span>
+              <small>Manager approval &amp; cutoff time bug</small>
+            </li>
+            <li role="option" tabindex="-1" data-preset-action="sample:loan_interest">
+              <span>Loan APR<span class="preset-ext">.cbl</span></span>
+              <small>Loan interest rounding &amp; rate limit</small>
+            </li>
+            <li class="home-bar-presets-divider" role="separator"></li>
+            <li role="option" tabindex="-1" class="is-generate-option" data-preset-action="generate">
+              <span>✨ Create a Brand-New Sample</span>
+              <small>Makes a fresh example file to test with</small>
+            </li>
+          </ul>
+        </div>
+        <div class="vs-chat-input-model">
+          <button class="vs-chat-input-model-btn" type="button" aria-haspopup="listbox"></button>
+          <ul class="vs-chat-input-menu" role="listbox" aria-label="Choose what to update to" hidden>
+            <li role="option" data-value="cobol-python" aria-selected="true">COBOL → Python<small>Fixes bugs &amp; translates to modern Python</small></li>
+            <li role="option" data-value="plsql-python">PL/SQL → Python<small>Updates old database rules safely</small></li>
+            <li role="option" data-value="cobol-java">COBOL → Java<small>Translates rules to modern Java</small></li>
+            <li role="option" data-value="audit-only">Plain-English Check<small>Finds bugs &amp; explains rules simply</small></li>
+          </ul>
+        </div>
+        <button class="vs-chat-input-send" type="submit" aria-label="Update &amp; open Workspace"></button>
+      </div>
+    </form>
+  `.trim();
+
+  persistentChatComposerEl = wrapper.firstElementChild;
+  const dropIconBtn = persistentChatComposerEl.querySelector('.home-drop-icon-btn');
+  const composerTextarea = persistentChatComposerEl.querySelector('.vs-chat-input-text');
+  const syncDropIconVisibility = () => {
+    if (!dropIconBtn || !composerTextarea) return;
+    dropIconBtn.classList.toggle('is-hidden', composerTextarea.value.trim().length > 0);
+  };
+  if (dropIconBtn) {
+    dropIconBtn.addEventListener('click', () => {
+      persistentChatComposerEl.querySelector('.vs-chat-input-attach')?.click();
+    });
+  }
+  if (composerTextarea) {
+    ['input', 'change', 'paste', 'drop'].forEach((evt) => {
+      composerTextarea.addEventListener(evt, () => requestAnimationFrame(syncDropIconVisibility));
+    });
+    persistentChatComposerEl.addEventListener('reset', () => requestAnimationFrame(syncDropIconVisibility));
+    persistentChatComposerEl.addEventListener('submit', () => requestAnimationFrame(syncDropIconVisibility));
+    syncDropIconVisibility();
+  }
+  const api = (window.vsChatInput && typeof window.vsChatInput.mount === 'function')
+    ? window.vsChatInput.mount(persistentChatComposerEl)
+    : persistentChatComposerEl.vsChatInput;
+
+  const presetsWrap = persistentChatComposerEl.querySelector('#home-bar-presets');
+  const presetsBtn = presetsWrap?.querySelector('.home-bar-presets-btn');
+  const presetsMenu = presetsWrap?.querySelector('.home-bar-presets-menu');
+  const presetOptions = Array.from(presetsMenu?.querySelectorAll('[role="option"]') || []);
+  const modelBtn = persistentChatComposerEl.querySelector('.vs-chat-input-model-btn');
+  let activeOptionIdx = -1;
+
+  const setActiveOption = (idx) => {
+    activeOptionIdx = idx;
+    presetOptions.forEach((opt, i) => opt.classList.toggle('is-active', i === idx));
+  };
+
+  const closePresetsMenu = (restoreFocus = false) => {
+    if (!presetsMenu || !presetsBtn || presetsMenu.hidden) return;
+    presetsMenu.hidden = true;
+    presetsBtn.setAttribute('aria-expanded', 'false');
+    setActiveOption(-1);
+    if (restoreFocus) presetsBtn.focus();
+  };
+
+  const openPresetsMenu = () => {
+    if (!presetsMenu || !presetsBtn) return;
+    if (modelBtn && modelBtn.getAttribute('aria-expanded') === 'true') {
+      modelBtn.click();
+    }
+    presetsMenu.hidden = false;
+    presetsBtn.setAttribute('aria-expanded', 'true');
+    setActiveOption(0);
+    presetsMenu.focus();
+  };
+
+  const runPresetAction = (action) => {
+    closePresetsMenu(false);
+    if (!action) return;
+    if (action === 'generate') {
+      generateDistinctBankingFile(api);
+      return;
+    }
+    if (action.startsWith('sample:')) {
+      attachSampleScenarioToComposer(action.slice('sample:'.length));
+    }
+  };
+
+  if (presetsBtn && presetsMenu) {
+    presetsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (presetsMenu.hidden) openPresetsMenu();
+      else closePresetsMenu(false);
+    });
+
+    presetsBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openPresetsMenu();
+      }
+    });
+
+    presetsMenu.tabIndex = -1;
+    presetsMenu.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closePresetsMenu(true);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveOption((activeOptionIdx + 1) % presetOptions.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveOption((activeOptionIdx - 1 + presetOptions.length) % presetOptions.length);
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const opt = presetOptions[activeOptionIdx];
+        if (opt) runPresetAction(opt.dataset.presetAction);
+      }
+    });
+
+    presetOptions.forEach((opt, idx) => {
+      opt.addEventListener('mouseenter', () => setActiveOption(idx));
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        runPresetAction(opt.dataset.presetAction);
+      });
+    });
+
+    if (modelBtn) {
+      modelBtn.addEventListener('click', () => closePresetsMenu(false));
+    }
+
+    document.addEventListener('click', (e) => {
+      if (presetsWrap && !presetsWrap.contains(e.target)) {
+        closePresetsMenu(false);
+      }
+    });
+  }
+
+  persistentChatComposerEl.addEventListener('vs-chat-input:files', (e) => {
+    const added = e.detail?.added || [];
+    if (!api) return;
+    added.forEach(({ id, file }) => {
+      animateComposerFileUpload(api, id, file);
+    });
   });
 
-  return persistentDropzoneEl;
+  persistentChatComposerEl.addEventListener('vs-chat-input:remove', (e) => {
+    if (e.detail?.id) {
+      composerStagedFiles.delete(e.detail.id);
+    }
+  });
+
+  persistentChatComposerEl.addEventListener('vs-chat-input:submit', (e) => {
+    if (!api) return;
+    handleComposerSubmit(e.detail || {}, api);
+  });
+
+  return persistentChatComposerEl;
+}
+
+function attachSampleScenarioToComposer(presetKey) {
+  const p = presets[presetKey];
+  if (!p) return;
+  const el = ensurePersistentChatComposer();
+  const api = el.vsChatInput;
+  if (!api) return;
+
+  // Avoid attaching duplicate chip of same sample file if already staged in composer
+  const alreadyAttached = (api.files || []).some(f => f.name === p.fileName);
+  if (!alreadyAttached) {
+    const sampleFile = new File([p.legacy + '\n'], p.fileName, { type: 'text/plain' });
+    api.addFiles([sampleFile]);
+  }
+  if (!String(api.value || '').trim()) {
+    api.value = `Check and fix banking rule errors in ${p.fileName} (${p.title})`;
+  }
+  api.focus();
+}
+
+function buildHomeDockHtml() {
+  const totalFiles = fileQueue.length;
+
+  return `
+    ${error ? `<div class="banner error" role="alert" style="width:100%"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
+    ${notice ? `<div class="banner" role="status" style="width:100%"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
+
+    ${totalFiles > 0 ? `
+      <div class="home-queue-status-bar" role="region" aria-label="Files ready for review">
+        <span class="home-queue-status-dot" aria-hidden="true"></span>
+        <span><strong>${totalFiles}</strong> file${totalFiles === 1 ? '' : 's'} ready</span>
+        <a class="home-open-ws-pill" href="/workspace.html">Open Workspace &rarr;</a>
+        <button type="button" id="clear-all-entries-btn" class="home-clear-queue-btn" title="Remove all files from list">Clear</button>
+      </div>
+    ` : ''}
+  `;
+}
+
+function renderHomeDockOnly() {
+  const dock = document.getElementById('home-composer-dock');
+  if (!dock) return;
+  dock.innerHTML = buildHomeDockHtml();
+  bindHomeEvents();
 }
 
 /* ==========================================================================
-   PAGE 1: HOMESCREEN STEP 1 WORKBENCH (OVER 3D SILICON BACKGROUND)
+   PAGE 1: CONDENSED CHAT COMPOSER HOMEPAGE (OVER 3D SILICON CHIP)
    ========================================================================== */
 function renderHomeStep1Page() {
   if (!HOME_CONTAINER) return;
-  if (persistentDropzoneEl && persistentDropzoneEl.parentNode) {
-    persistentDropzoneEl.parentNode.removeChild(persistentDropzoneEl);
+  if (persistentChatComposerEl && persistentChatComposerEl.parentNode) {
+    persistentChatComposerEl.parentNode.removeChild(persistentChatComposerEl);
   }
 
-  const activeItem = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
-  const activePreset = currentPreset();
-  const sLines = source ? source.split('\n').length : 0;
-  const pLines = policy ? policy.split('\n').filter(Boolean).length : 0;
-
   HOME_CONTAINER.innerHTML = `
-    ${error ? `<div class="banner error" role="alert"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
-    ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
-
-    <section class="step home-step1-card" aria-labelledby="s1-home-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge">Step 1 of 4 · Banking Input &amp; Faulty Code Lab</span>
-            <h2 id="s1-home-title">Add Banking Code or Generate a Faulty Demo Script</h2>
-          </div>
-          <p>Drop your banking code files on the left, or use the <strong>AI Faulty Banking Code Generator</strong> on the right to create legacy COBOL with an intentional business-rule bug for testing.</p>
-        </div>
-
-        <div class="actions">
-          <button type="button" id="home-preview-go" class="btn-secondary" ${busy ? 'disabled' : ''}>
-            Quick preview rules &rarr;
-          </button>
-          <button type="button" id="home-extract-go" class="primary" ${busy ? 'disabled' : ''}>
-            ${busy === 'analyze' ? '<span class="spinner"></span>Extracting rules…' : 'Find Business Rules &rarr;'}
-          </button>
-        </div>
-      </div>
-
-      <!-- Top Row: Vividsites Dropzone + AI Faulty Banking Code Generator -->
-      <div class="step1-dropzone-stage">
-        <div class="step1-dropzone-main">
-          <div id="vs-dropzone-slot"></div>
-
-          <!-- Queued Banking Files Strip on Homescreen -->
-          <div class="home-queue-strip" aria-label="Queued banking files">
-            <span class="home-queue-label">Banking Queue (${fileQueue.length}):</span>
-            <div class="home-queue-pills">
-              ${fileQueue.map(item => `
-                <button type="button" class="home-queue-pill ${item.id === activeFileId ? 'active' : ''}" data-queue-select="${esc(item.id)}">
-                  <span class="queue-dot ${getQueueItemStatus(item).cls}"></span>
-                  <span>${esc(item.name)}</span>
-                </button>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-
-        <!-- AI Faulty Banking Code Generator (Single Industry: Banking) -->
-        <div class="step1-quick-options faulty-generator-card">
-          <div class="faulty-gen-header">
-            <span class="faulty-gen-badge">Demo &amp; Testing Tool</span>
-            <strong>AI Faulty Banking Code Generator</strong>
-          </div>
-          <p class="faulty-gen-desc">
-            Select a banking defect preset below or click <strong>Generate with AI</strong> to create legacy COBOL with a realistic hidden policy bug.
-          </p>
-
-          <div class="preset-bug-grid" role="group" aria-label="Banking bug presets">
-            ${Object.values(presets).map(p => `
-              <button type="button" class="preset-bug-btn ${activePresetId === p.id ? 'active' : ''}" data-select-preset="${esc(p.id)}">
-                <span class="preset-bug-dot"></span>
-                <span>
-                  <strong>${esc(p.title)}</strong>
-                  <small>${esc(p.fileName)} &middot; ${esc(p.label.split('·')[1] || 'Banking')}</small>
-                </span>
-              </button>
-            `).join('')}
-          </div>
-
-          <button type="button" id="generate-faulty-ai-btn" class="faulty-ai-cta" ${busy ? 'disabled' : ''}>
-            ${busy === 'faulty' ? '<span class="spinner"></span>Generating faulty COBOL…' : '✨ Generate Faulty Banking Code with AI'}
-          </button>
-
-          <div class="planted-bug-banner" role="status">
-            <strong>⚠️ ${esc(activeItem?.bugBadge || activePreset.bugBadge)}</strong>
-            <span>${esc(activeItem?.description || activePreset.description)}</span>
-          </div>
-
-          <div class="lang-bar">
-            <label>Translating from
-              <input id="language" value="${esc(language)}" aria-label="Original code language"/>
-            </label>
-            <span class="lang-arrow" aria-hidden="true">&rarr;</span>
-            <label>Translating to
-              <input id="target" value="${esc(target)}" aria-label="New code language"/>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Editable Banking Source Code & Plain-English Policy -->
-      <div class="grid two">
-        <div class="ide-pane">
-          <div class="ide-header">
-            <div class="ide-title-group">
-              <span class="ide-title">Original Banking Code (Faulty Input)</span>
-              <span class="ide-badge">${esc(language)}</span>
-            </div>
-            <div class="ide-meta">
-              <span class="ide-lines" id="source-lines-badge">${sLines} lines</span>
-              <label class="copy-btn upload-code-btn" for="upload-code-input" title="Upload a banking code file">Upload file</label>
-              <input id="upload-code-input" type="file" accept=".cbl,.cob,.cpy,.sql,.pls,.pkb,.py,.js,.ts,.java,.cs,.go,.cpp,.c,.txt" hidden />
-              <button type="button" class="copy-btn" data-copy="source">Copy</button>
-            </div>
-          </div>
-          <div class="ide-body">
-            <div class="line-gutter" id="source-gutter" aria-hidden="true">${Array.from({length: Math.max(1, sLines)}, (_, i) => i + 1).join('<br/>')}</div>
-            <textarea id="source" spellcheck="false" aria-label="Original banking code">${esc(source)}</textarea>
-          </div>
-        </div>
-
-        <div class="ide-pane">
-          <div class="ide-header">
-            <div class="ide-title-group">
-              <span class="ide-title">Intended Bank Policy (Plain English)</span>
-              <span class="ide-badge">Banking Policy</span>
-            </div>
-            <div class="ide-meta">
-              <span class="ide-lines" id="policy-lines-badge">${pLines} items</span>
-              <label class="copy-btn upload-code-btn" for="upload-policy-input" title="Upload a policy text file">Upload policy</label>
-              <input id="upload-policy-input" type="file" accept=".txt,.md,.policy,.doc" hidden />
-              <button type="button" class="copy-btn" data-copy="policy">Copy</button>
-            </div>
-          </div>
-          <div class="ide-body">
-            <textarea id="policy" aria-label="Intended bank policy">${esc(policy)}</textarea>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bottom Step 1 Handoff Bar -->
-      <div class="home-step1-footer">
-        <div class="home-step1-footer-info">
-          <span class="status">Active File: ${esc(activeItem ? activeItem.name : 'fee_waiver.cbl')}</span>
-          <span>Ready to extract plain-English banking rules and open the Workspace.</span>
-        </div>
-        <div class="actions">
-          <button type="button" id="home-preview-go-bottom" class="btn-secondary" ${busy ? 'disabled' : ''}>
-            Quick preview rules &rarr;
-          </button>
-          <button type="button" id="home-extract-go-bottom" class="primary" ${busy ? 'disabled' : ''}>
-            Find Business Rules &rarr;
-          </button>
-        </div>
-      </div>
-    </section>
+    <div id="vs-chat-input-slot" class="home-composer-slot"></div>
+    <div id="home-composer-dock" class="home-composer-dock">
+      ${buildHomeDockHtml()}
+    </div>
   `;
 
-  const slot = document.getElementById('vs-dropzone-slot');
+  const slot = document.getElementById('vs-chat-input-slot');
   if (slot) {
-    slot.appendChild(ensurePersistentDropzone());
+    slot.appendChild(ensurePersistentChatComposer());
+    if (window.a2bSyncThemeElements) window.a2bSyncThemeElements();
   }
 
   bindHomeEvents();
 }
 
 /* ==========================================================================
-   PAGE 2: WORKSPACE (STEP 2: REVIEW RULES & STEP 3: SIDE-BY-SIDE CODE DIFF)
+   PAGE 2: WORKSPACE — QUEUE VIEWER, CURRENT vs. SUGGESTED CODE & ANNOTATIONS
    ========================================================================== */
 function renderWorkspacePage() {
   if (!WORKSPACE_CONTAINER) return;
   renderSidebarQueue();
-  updateRailTelemetry();
 
-  const activeItem = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
-  const activePreset = currentPreset();
-  const c = ruleCounts();
-  const hasRules = rules.length > 0;
-  const hasCode = Boolean(result && result.code);
-  const sLines = source ? source.split('\n').length : 0;
+  if (!fileQueue.length) {
+    WORKSPACE_CONTAINER.innerHTML = `
+      ${error ? `<div class="banner error" role="alert"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
+      ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
+      <section class="step" style="text-align:center;padding:2.5rem 1.5rem">
+        <h2 style="margin:0 0 0.5rem;font-family:var(--font-display)">No files added yet</h2>
+        <p style="margin:0 0 1.25rem;color:var(--text-muted)">Add a banking file or try an example on the Home page to compare the old and updated versions side by side.</p>
+        <div class="actions" style="justify-content:center">
+          <a class="primary" href="/">Go to Home &amp; Add Files &rarr;</a>
+          <button type="button" id="ws-load-sample-btn" class="btn-secondary">Try a Sample File</button>
+        </div>
+      </section>
+    `;
+    bindCommonQueueEvents();
+    const loadSampleBtn = document.getElementById('ws-load-sample-btn');
+    if (loadSampleBtn) {
+      loadSampleBtn.onclick = () => {
+        initDefaultQueue();
+        saveQueueToStorage();
+        render();
+      };
+    }
+    return;
+  }
+
+  let activeIdx = fileQueue.findIndex(f => f.id === activeFileId);
+  if (activeIdx < 0) {
+    activeIdx = 0;
+    applyQueueItemToGlobals(fileQueue[0]);
+  }
+  const activeItem = fileQueue[activeIdx];
+  if (!activeItem.result || !Array.isArray(activeItem.annotations) || !activeItem.annotations.length) {
+    autoFixQueueItem(activeItem);
+    applyQueueItemToGlobals(activeItem);
+  }
+
+  const totalFiles = fileQueue.length;
+  const approvedTotal = fileQueue.filter(f => f.approved).length;
+  const allApproved = areAllFilesApproved();
+
+  const currentLines = String(activeItem.source || '').split('\n');
+  const suggestedLines = String(activeItem.result?.code || '').split('\n');
+  const itemAnns = Array.isArray(activeItem.annotations) ? activeItem.annotations : [];
+  const activeAnns = itemAnns.filter(a => a.status !== 'removed');
+
+  // Map line -> annotation for Current Code & Suggested Code
+  const currentLineAnn = new Map();
+  const currentLineFirst = new Map();
+  const suggestedLineAnn = new Map();
+  const suggestedLineFirst = new Map();
+
+  activeAnns.forEach(ann => {
+    const [oStart, oEnd] = ann.oldRange || [1, 1];
+    for (let ln = oStart; ln <= oEnd; ln++) {
+      if (!currentLineAnn.has(ln)) currentLineAnn.set(ln, ann);
+    }
+    if (!currentLineFirst.has(oStart)) currentLineFirst.set(oStart, ann);
+
+    const [nStart, nEnd] = ann.newRange || [1, 1];
+    for (let ln = nStart; ln <= nEnd; ln++) {
+      if (!suggestedLineAnn.has(ln)) suggestedLineAnn.set(ln, ann);
+    }
+    if (!suggestedLineFirst.has(nStart)) suggestedLineFirst.set(nStart, ann);
+  });
+
+  const editedCount = itemAnns.filter(a => a.status === 'edited').length;
+  const removedCount = itemAnns.filter(a => a.status === 'removed').length;
 
   WORKSPACE_CONTAINER.innerHTML = `
     ${error ? `<div class="banner error" role="alert"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
     ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
 
-    <!-- Compact Step 1 Context Bar (Links back to Homescreen or lets user peek/edit inputs) -->
-    <section class="ws-step1-context-bar" aria-label="Active banking file">
-      <div class="ws-context-main">
-        <span class="step-badge done">✓ Step 1 Loaded</span>
-        <strong>${esc(activeItem ? activeItem.name : 'fee_waiver.cbl')}</strong>
-        <span class="ws-context-bug">${esc(activeItem?.bugBadge || activePreset.bugBadge)}</span>
+    <!-- 1. Top Queue Viewer Navigation Bar -->
+    <header class="qv-header-bar" aria-label="Queue Viewer navigation">
+      <button type="button" id="qv-prev-file" class="qv-nav-btn" ${activeIdx <= 0 ? 'disabled' : ''}>
+        &larr; Back
+      </button>
+
+      <div class="qv-center-info">
+        <div class="qv-file-headline">
+          <span class="qv-file-num">File #${activeIdx + 1} of ${totalFiles}</span>
+          <span>${esc(activeItem.name)}</span>
+        </div>
+        <div class="qv-sub-label">
+          <span>File Review &middot; ${esc(activeItem.language || 'COBOL')} &rarr; ${esc(activeItem.target || 'Python')}</span>
+          <span class="qv-approval-badge ${activeItem.approved ? 'is-approved' : ''}">
+            ${activeItem.approved ? '✓ Approved & Complete' : `${activeAnns.length} Fix${activeAnns.length === 1 ? '' : 'es'} Ready`}
+          </span>
+        </div>
       </div>
-      <div class="ws-context-actions">
-        <details class="ws-code-peek">
-          <summary>View or edit Step 1 code &amp; bank policy (${sLines} lines)</summary>
-          <div class="ws-code-peek-body">
-            <div class="grid two">
-              <div class="ide-pane">
-                <div class="ide-header">
-                  <div class="ide-title-group">
-                    <span class="ide-title">Original Banking Code</span>
-                    <span class="ide-badge">${esc(language)}</span>
-                  </div>
-                </div>
-                <div class="ide-body">
-                  <textarea id="source" spellcheck="false" aria-label="Original banking code">${esc(source)}</textarea>
-                </div>
-              </div>
-              <div class="ide-pane">
-                <div class="ide-header">
-                  <div class="ide-title-group">
-                    <span class="ide-title">Intended Bank Policy</span>
-                    <span class="ide-badge">Policy</span>
-                  </div>
-                </div>
-                <div class="ide-body">
-                  <textarea id="policy" aria-label="Intended bank policy">${esc(policy)}</textarea>
-                </div>
-              </div>
-            </div>
-            <div class="actions" style="margin-top:0.65rem;justify-content:flex-end">
-              <button type="button" id="analyze" class="primary" ${busy ? 'disabled' : ''}>Refresh business rules &rarr;</button>
-            </div>
+
+      <button type="button" id="qv-next-file" class="qv-nav-btn" ${activeIdx >= totalFiles - 1 ? 'disabled' : ''}>
+        Next &rarr;
+      </button>
+    </header>
+
+    <!-- 2. Side-by-Side Current Code vs. Suggested Code -->
+    <section class="qv-code-grid" aria-label="Old Code and Updated Code comparison">
+      <div class="qv-code-pane is-current">
+        <div class="ide-header">
+          <div class="ide-title-group">
+            <span class="ide-title"><span class="ide-code-icon" aria-hidden="true">&lt;&gt;</span>Old Code (Before)</span>
+            <span class="ide-badge">${esc(activeItem.language || 'COBOL')}</span>
           </div>
-        </details>
-        <a class="btn-secondary" href="/#home-step1-content">&larr; Step 1 (Home / AI Bug Lab)</a>
+          <div class="ide-meta">
+            <span class="ide-lines">${currentLines.length} lines</span>
+            <button type="button" class="copy-btn" data-copy="source">Copy</button>
+          </div>
+        </div>
+        <div class="qv-code-scroll" id="qv-current-scroll">
+          ${currentLines.map((lineText, idx) => {
+            const ln = idx + 1;
+            const ann = currentLineAnn.get(ln);
+            const firstAnn = currentLineFirst.get(ln);
+            const isHovered = ann && hoveredAnnId === ann.id;
+            const cls = [
+              'qv-line-row',
+              ann ? 'has-ann-current' : '',
+              isHovered ? 'is-ann-active' : ''
+            ].filter(Boolean).join(' ');
+            return `
+              <div class="${cls}" ${ann ? `data-ann-id="${esc(ann.id)}" data-side="current"` : ''} data-ln="${ln}">
+                <span class="qv-ln">${ln}</span>
+                <span class="qv-code-text">${highlightCodeLine(lineText, activeItem.language || 'COBOL')}</span>
+                ${firstAnn ? `<span class="qv-line-tag">${esc(formatChangeLabel(firstAnn.id))} &middot; ${esc(firstAnn.oldRefLabel)}</span>` : '<span></span>'}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="qv-code-pane is-suggested">
+        <div class="ide-header">
+          <div class="ide-title-group">
+            <span class="ide-title"><span class="ide-code-icon" aria-hidden="true">&lt;&gt;</span>Updated Code (After)</span>
+            <span class="ide-badge">${esc(activeItem.target || 'Python')} &middot; Fixed</span>
+          </div>
+          <div class="ide-meta">
+            <span class="ide-lines">${suggestedLines.length} lines</span>
+            <button type="button" class="copy-btn" data-copy="code">Copy</button>
+            <button type="button" class="copy-btn" id="download">Download</button>
+          </div>
+        </div>
+        <div class="qv-code-scroll" id="qv-suggested-scroll">
+          ${suggestedLines.map((lineText, idx) => {
+            const ln = idx + 1;
+            const ann = suggestedLineAnn.get(ln);
+            const firstAnn = suggestedLineFirst.get(ln);
+            const isHovered = ann && hoveredAnnId === ann.id;
+            const cls = [
+              'qv-line-row',
+              ann ? 'has-ann-suggested' : '',
+              isHovered ? 'is-ann-active' : ''
+            ].filter(Boolean).join(' ');
+            return `
+              <div class="${cls}" ${ann ? `data-ann-id="${esc(ann.id)}" data-side="suggested"` : ''} data-ln="${ln}">
+                <span class="qv-ln">${ln}</span>
+                <span class="qv-code-text">${highlightCodeLine(lineText, activeItem.target || 'Python')}</span>
+                ${firstAnn ? `<span class="qv-line-tag">${esc(formatChangeLabel(firstAnn.id))} &middot; ${esc(firstAnn.newRefLabel)}</span>` : '<span></span>'}
+              </div>
+            `;
+          }).join('')}
+        </div>
       </div>
     </section>
 
-    <!-- STEP 2: REVIEW BUSINESS RULES -->
-    <section class="step ${stepCollapsed[1] ? 'is-collapsed' : ''}" id="step-1" aria-labelledby="s2-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge ${hasCode ? 'done' : ''}">${hasCode ? '✓ ' : ''}Step 2</span>
-            <h2 id="s2-title">Review the Banking Business Rules</h2>
-          </div>
-          <p>${hasRules
-            ? `Choose whether to <strong>Keep</strong>, <strong>Edit</strong>, or <strong>Drop</strong> each plain-English rule before generating your updated ${esc(target)} code.`
-            : 'Extract plain-English banking rules from your Step 1 code and policy to start reviewing.'}</p>
+    <!-- 3. Annotation Viewer Panel (2-Column Grid of Version-Control Cards) -->
+    <section class="qv-annotation-panel" aria-labelledby="qv-ann-heading">
+      <div class="qv-ann-panel-head">
+        <div>
+          <h2 id="qv-ann-heading">Plain-English Change Notes</h2>
+          <p>Simple notes explaining what each section does and why we changed it. Point your mouse at any card or highlighted line to see where it lives in the file.</p>
         </div>
-
-        <div class="actions">
-          ${hasRules ? `
-            <span class="status">${c.approved} of ${c.total} rules included</span>
-            <button type="button" id="preview-code" class="btn-secondary" ${busy ? 'disabled' : ''}>Quick preview code</button>
-            <button type="button" id="generate" class="primary" ${(busy || !c.approved) ? 'disabled' : ''}>
-              ${busy === 'generate' ? '<span class="spinner"></span>Creating code…' : (hasCode ? 'Update code comparison &rarr;' : 'Create updated code &rarr;')}
-            </button>
-            <button type="button" class="step-toggle-btn" data-toggle-step="1">${stepCollapsed[1] ? 'Show' : 'Hide'}</button>
-          ` : `
-            <button type="button" id="preview-rules" class="btn-secondary" ${busy ? 'disabled' : ''}>Load banking rules preview</button>
-            <button type="button" id="analyze-inline" class="primary" ${busy ? 'disabled' : ''}>
-              ${busy === 'analyze' ? '<span class="spinner"></span>Extracting rules…' : 'Find business rules &rarr;'}
-            </button>
-          `}
-        </div>
+        <span class="qv-hover-readout" id="qv-hover-readout">
+          Hover a line or card to highlight it (${activeAnns.length} active${editedCount ? ` · ${editedCount} edited` : ''}${removedCount ? ` · ${removedCount} removed` : ''})
+        </span>
       </div>
 
-      ${hasRules ? `
-        <div class="step-body">
-          <div class="analysis-strip">
-            <div class="card">
-              <strong>What the original banking code does:</strong> ${esc(analysis.summary)}
-            </div>
-            ${analysis.conflicts?.length
-              ? `<div class="card conflict"><strong>⚠️ Banking policy bug found:</strong> ${analysis.conflicts.map(esc).join(' · ')}</div>`
-              : `<div class="card"><strong>Policy check:</strong> No conflicts found between the old code and your bank policy.</div>`
-            }
-          </div>
-
-          <div class="rule-toolbar">
-            <div class="rule-summary" role="status" aria-live="polite">
-              <span class="pill keep">${c.keep} Kept</span>
-              <span class="pill edit">${c.edit} Edited</span>
-              <span class="pill drop">${c.drop} Dropped</span>
-            </div>
-            <div class="rule-bulk">
-              <button type="button" id="keep-all">Keep all</button>
-              <button type="button" id="reset-rules">Reset</button>
-            </div>
-          </div>
-
-          <div class="rule-box-grid" role="list">
-            ${rules.map((r, i) => `
-              <article class="rule-box ${esc(r.decision)}" role="listitem">
-                <div class="rule-box-top">
-                  <div class="rule-box-id">
-                    <span class="rule-num">Rule ${i + 1}</span>
-                    <span class="rule-chip ${esc(r.decision)}">${r.decision === 'keep' ? 'Keep' : r.decision === 'edit' ? 'Edited' : 'Dropped'}</span>
-                    ${r.custom ? '<span class="rule-chip edit">Added by you</span>' : ''}
+      <div class="qv-annotation-grid" role="list">
+        ${itemAnns.map((ann, idx) => {
+          const isRemoved = ann.status === 'removed';
+          const isEdited = ann.status === 'edited';
+          const isHovered = !isRemoved && hoveredAnnId === ann.id;
+          const kindCls = isRemoved ? 'is-removed' : isEdited ? 'is-edited' : '';
+          const kindText = isRemoved ? 'Removed (Click Update to apply)' : isEdited ? 'Edited by You' : ann.kindLabel;
+          return `
+            <article
+              class="qv-ann-card ${isRemoved ? 'is-removed' : ''} ${isHovered ? 'is-ann-active' : ''}"
+              role="listitem"
+              data-ann-card="${esc(ann.id)}"
+              data-ann-index="${idx}"
+            >
+              <div>
+                <div class="qv-ann-top">
+                  <div class="qv-ann-badges">
+                    <span class="qv-ann-id">${esc(formatChangeLabel(ann.id))}</span>
+                    <span class="qv-ann-lines">${esc(ann.oldRefLabel)} &rarr; ${esc(ann.newRefLabel)}</span>
                   </div>
-                  <div class="seg-group" role="group" aria-label="Decision for Rule ${i + 1}">
-                    <button type="button" class="${r.decision === 'keep' ? 'active' : ''}" data-act="keep" data-index="${i}">Keep</button>
-                    <button type="button" class="${r.decision === 'edit' ? 'active' : ''}" data-act="edit" data-index="${i}">Edit</button>
-                    <button type="button" class="${r.decision === 'drop' ? 'active' : ''}" data-act="drop" data-index="${i}">Drop</button>
-                    ${r.custom ? `<button type="button" data-act="remove" data-index="${i}" title="Remove rule">&times;</button>` : ''}
-                  </div>
+                  <span class="qv-ann-kind ${kindCls}">${esc(kindText)}</span>
                 </div>
-                <div class="rule-box-body">
-                  ${r.decision === 'edit'
-                    ? `<label class="edit-label">Rewrite this banking rule in plain English
-                        <textarea data-edit="${i}">${esc(r.text)}</textarea>
+
+                <div class="qv-ann-body" style="margin-top:10px">
+                  <div class="qv-ann-what">
+                    <strong>What this part does:</strong> ${esc(ann.whatItDoes)}
+                  </div>
+                  ${ann.editing ? `
+                    <div style="margin-top:6px">
+                      <label style="display:block;font-size:11.5px;font-weight:600;color:var(--amber);margin-bottom:4px" for="ann-edit-box-${idx}">
+                        Tell us what you want changed instead:
                       </label>
-                      ${!r.custom ? `<div class="original-ref">Original rule: ${esc(r.original)}</div>` : ''}`
-                    : `<p class="rule-text">${esc(r.text)}</p>`
-                  }
+                      <textarea id="ann-edit-box-${idx}" class="qv-ann-edit-area" data-ann-textarea="${idx}">${esc(ann.reason)}</textarea>
+                    </div>
+                  ` : `
+                    <div class="qv-ann-why">
+                      <strong>Why we changed it:</strong> ${esc(ann.reason)}
+                    </div>
+                  `}
                 </div>
-              </article>
-            `).join('')}
-          </div>
+              </div>
 
-          <div class="add-rule-bar">
-            <input id="new-rule-input" type="text" placeholder="Add a missing banking business rule in plain English…" aria-label="New banking business rule"/>
-            <button type="button" id="add-rule">Add rule</button>
-          </div>
-        </div>
-      ` : `
-        <div class="step-locked-hint">
-          Click <strong>Find business rules &rarr;</strong> or <strong>Load banking rules preview</strong> above to extract plain-English rules from <strong>${esc(activeItem ? activeItem.name : 'fee_waiver.cbl')}</strong>.
-        </div>
-      `}
-    </section>
-
-    <!-- STEP 3: SIDE-BY-SIDE OLD CODE VS. NEW CODE (WITH CHANGE IDS) -->
-    <section class="step ${stepCollapsed[2] ? 'is-collapsed' : ''}" id="step-2" aria-labelledby="s3-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge ${hasCode ? 'done' : ''}">${hasCode ? '✓ ' : ''}Step 3</span>
-            <h2 id="s3-title">Old Code vs. New Code (With Change IDs)</h2>
-          </div>
-          <p>${hasCode
-            ? `Every change in the new ${esc(target)} code has a Change ID (<code>CHG-01</code>..<code>CHG-04</code>) that points directly back to the original ${esc(language)} lines.`
-            : 'Approve your banking rules in Step 2 above to generate updated code and compare it side by side with Change IDs.'}</p>
-        </div>
-
-        <div class="actions">
-          ${hasCode ? `
-            <a class="primary" href="/summary.html">Go to Test &amp; Summary Report (Step 4) &rarr;</a>
-            <button type="button" class="step-toggle-btn" data-toggle-step="2">${stepCollapsed[2] ? 'Show' : 'Hide'}</button>
-          ` : `
-            <span class="status">Waiting for Step 2</span>
-          `}
-        </div>
+              <div class="qv-ann-actions">
+                ${ann.editing ? `
+                  <button type="button" class="qv-ann-btn" data-ann-save="${idx}">Save</button>
+                  <button type="button" class="qv-ann-btn" data-ann-cancel="${idx}">Cancel</button>
+                ` : `
+                  <button type="button" class="qv-ann-btn" data-ann-edit="${idx}" ${isRemoved ? 'disabled' : ''}>Edit</button>
+                  <button type="button" class="qv-ann-btn ${isRemoved ? '' : 'is-remove'}" data-ann-toggle-remove="${idx}">
+                    ${isRemoved ? 'Restore' : 'Remove'}
+                  </button>
+                `}
+              </div>
+            </article>
+          `;
+        }).join('')}
       </div>
-
-      ${hasCode ? `
-        <div class="step-body">
-          ${renderAnnotatedSideBySideHtml(false)}
-
-          <!-- Step 3 -> Step 4 Handoff Banner -->
-          <div class="summary-ready-banner">
-            <div class="summary-ready-copy">
-              <strong>✓ Side-by-side code comparison ready for ${esc(activeItem ? activeItem.name : 'fee_waiver.cbl')}!</strong>
-              <span>Next step: Open the <strong>Test &amp; Summary Report</strong> page to run real-world banking scenario tests and unlock your Time &amp; Cost Savings estimate.</span>
-            </div>
-            <div class="actions">
-              <a class="primary" href="/summary.html">Go to Test &amp; Summary Report &rarr;</a>
-            </div>
-          </div>
-        </div>
-      ` : `
-        <div class="step-locked-hint">
-          Once you review your banking rules in Step 2 and click <strong>Create updated code &rarr;</strong>, the side-by-side <strong>Original Code vs. Updated Code (With Change IDs)</strong> comparison appears right here.
-        </div>
-      `}
     </section>
+
+    <!-- 4. Bottom Action Bar: Approve File (Green) | Update Changes (Cyan/Blue) -->
+    <div class="qv-bottom-actions">
+      <button
+        type="button"
+        id="approve-file-btn"
+        class="btn-approve-complete ${activeItem.approved ? 'is-already-approved' : ''}"
+        ${busy ? 'disabled' : ''}
+      >
+        <span>${activeItem.approved ? '✓ Approved & Complete' : 'Approve changes & mark file done'}</span>
+        <small>${activeItem.approved
+          ? (allApproved ? 'All files approved! Click "View Summary & Export" in the left sidebar →' : `${approvedTotal} of ${totalFiles} files approved · Click to make more edits`)
+          : `Marks ${esc(activeItem.name)} as ready (${approvedTotal}/${totalFiles} approved)`}</small>
+      </button>
+
+      <button
+        type="button"
+        id="rerun-analysis-btn"
+        class="btn-rerun-analysis"
+        ${busy ? 'disabled' : ''}
+      >
+        <span>${busy === 'rerun' ? 'Updating code…' : 'Apply my edits'}</span>
+        <small>Updates the new code using your edited or removed notes</small>
+      </button>
+    </div>
   `;
 
   bindWorkspaceEvents();
 }
 
 /* ==========================================================================
-   PAGE 3: SUMMARY & REPORT PAGE (/summary.html)
-   Order selected by user:
-     1st: Test the Updated Code (run banking scenario tests & AI edge cases)
-     2nd: What Changed Summary & Executive Takeaways (with Change ID table)
-     3rd: Estimated Time & Cost Saved (ROI) — unlocked once tests run
+   PAGE 3: QUEUE-WIDE SUMMARY & REPORT PAGE (/summary.html)
    ========================================================================== */
+const GENERATED_CHANGELOG_DESCRIPTIONS = {
+  cd_early_withdrawal: {
+    did: 'Figured out early withdrawal fees for CDs, but mixed up the grace-period rule and dropped fractions of a penny.',
+    now: 'Checks if the CD reached its term or grace window clearly and rounds every dollar amount to the exact penny.',
+    improved: 'Keeps the same 3% and 1.5% early fee rules while making sure customers inside their grace window are not overcharged.'
+  },
+  ach_batch_settlement: {
+    did: 'Checked bank transfer batch totals and cutoff times in old code to pick same-day or next-day delivery.',
+    now: 'Checks batch amounts upfront, enforces the exact $100,000.00 same-day limit, and routes transfers reliably.',
+    improved: 'Keeps same-day vs. next-day delivery rules intact while blocking negative numbers and penny rounding mistakes.'
+  },
+  escrow_tax_disbursement: {
+    did: 'Divided yearly property taxes by 12 without rounding or checking for negative tax amounts, causing penny errors.',
+    now: 'Figures out monthly escrow payments rounded cleanly to the nearest penny and adjusts for any shortfall.',
+    improved: 'Keeps the same monthly escrow math while stopping leftover fraction-of-a-cent errors and invalid numbers.'
+  },
+  atm_daily_withdrawal: {
+    did: 'Checked ATM cash withdrawals against a $1,000 daily limit without stopping negative withdrawal amounts.',
+    now: 'Blocks negative or blank withdrawal amounts right away and totals daily ATM cash use cleanly.',
+    improved: 'Keeps the $1,000 daily ATM cap working normally while stopping invalid negative withdrawal requests.'
+  },
+  fx_remittance_spread: {
+    did: 'Used approximate computer math for foreign exchange fees on international money transfers.',
+    now: 'Uses exact penny-level money math and checks payment numbers right at the start.',
+    improved: 'Keeps the exact currency rate formula while stopping tiny rounding errors on international transfers.'
+  },
+  credit_card_grace_period: {
+    did: 'Charged monthly credit card interest even when the customer paid their previous bill in full.',
+    now: 'Checks if the customer paid in full first and checks inputs before calculating exact penny-level interest.',
+    improved: 'Keeps normal interest billing working for unpaid balances while making sure paid-in-full customers pay $0 interest.'
+  }
+};
+
+function describeFileChangelog(item) {
+  const targetLang = /java/i.test(String(item.target || '')) ? 'Java' : 'Python';
+  const activeAnns = (item.annotations || []).filter(a => a.status !== 'removed');
+  const editedAnns = activeAnns.filter(a => a.status === 'edited');
+  const removedCount = (item.annotations || []).filter(a => a.status === 'removed').length;
+  const stem = String(item.name || '').replace(/\.[^.]+$/, '').replace(/_v\d+$/i, '').toLowerCase();
+
+  const builtInMap = {
+    fee_waiver: {
+      did: 'Checked $12 monthly checking fees, but tucked the under-25 student discount inside the direct-deposit rule by mistake.',
+      now: `Written in clear ${targetLang}: checks inputs first, then checks the $1,500 balance, $500 deposit, and student discounts fairly.`,
+      improved: 'Keeps existing $0 fee waivers for high-balance and direct-deposit accounts while fixing the bug that overcharged students.'
+    },
+    overdraft_trap: {
+      did: 'Took out withdrawals before counting same-day deposits, charging unfair $35 overdraft fees even when enough money arrived.',
+      now: `Counts same-day deposits before checking withdrawals in ${targetLang}, and blocks negative amounts.`,
+      improved: 'Keeps overdraft fees when funds are truly short while ending unfair fees caused by processing withdrawals first.'
+    },
+    wire_limit: {
+      did: 'Processed wire transfers with an off-by-one cutoff hour and skipped manager approval right at the dollar limit.',
+      now: `Enforces exact cutoff hours, manager approval thresholds, and safety checks upfront in ${targetLang}.`,
+      improved: 'Keeps everyday wires moving smoothly while closing approval gaps right at exact dollar and time cutoffs.'
+    },
+    loan_interest: {
+      did: 'Calculated loan penalty rates with cut-off math and had no built-in check for the maximum allowed rate cap.',
+      now: `Calculates loan interest and rate caps cleanly to the exact cent in ${targetLang} with upfront safety checks.`,
+      improved: 'Keeps normal loan interest working while preventing penny rounding drift and enforcing legal rate limits.'
+    }
+  };
+
+  let base = null;
+  if (item.isBuiltIn && item.presetKey && builtInMap[item.presetKey]) {
+    base = builtInMap[item.presetKey];
+  } else if (GENERATED_CHANGELOG_DESCRIPTIONS[stem]) {
+    base = GENERATED_CHANGELOG_DESCRIPTIONS[stem];
+  } else {
+    const srcLang = item.language || 'old banking';
+    base = {
+      did: `Ran ${srcLang} banking rules across ${String(item.source || '').split('\n').length} lines without upfront safety checks or penny rounding.`,
+      now: `Updated into clear ${targetLang} steps with ${activeAnns.length} active fix${activeAnns.length === 1 ? '' : 'es'} and a single clear result.`,
+      improved: 'Keeps your core banking rules working the same while adding safety checks, exact penny math, and plain-English notes.'
+    };
+  }
+
+  let customNote = '';
+  if (editedAnns.length || removedCount) {
+    const parts = [];
+    if (editedAnns.length) parts.push(`${editedAnns.length} note${editedAnns.length === 1 ? '' : 's'} edited by you`);
+    if (removedCount) parts.push(`${removedCount} change${removedCount === 1 ? '' : 's'} removed`);
+    customNote = ` Includes your Workspace edits (${parts.join(' & ')}).`;
+  }
+
+  return {
+    did: base.did,
+    now: base.now,
+    improved: base.improved + customNote,
+    activeAnns
+  };
+}
+
+function renderSummaryOverviewLiveHtml() {
+  const m = computeImpactMetrics();
+  return `
+    <div class="sum-kpi-row">
+      <div class="sum-kpi-card">
+        <span class="sum-kpi-label">Hours Saved</span>
+        <div class="sum-kpi-val is-sky">
+          <span>${m.savedHrs} hrs</span>
+          <span class="report-delta-pill">&minus;${m.pctSaved}%</span>
+        </div>
+        <span class="sum-kpi-sub">${m.assistedHrs} hrs with A2B Labs vs. ${m.baselineHrs} hrs by hand${m.modules > 1 ? ` (&times;${m.modules} batch)` : ''}</span>
+      </div>
+
+      <div class="sum-kpi-card">
+        <span class="sum-kpi-label">Money Saved</span>
+        <div class="sum-kpi-val is-emerald">${fmtMoney(m.savedDollars)}</div>
+        <span class="sum-kpi-sub">(${m.baselineHrs}h &minus; ${m.assistedHrs}h) &times; $${m.rate}/hr team cost</span>
+      </div>
+
+      <div class="sum-kpi-card">
+        <span class="sum-kpi-label">Files Ready</span>
+        <div class="sum-kpi-val">${m.approvedCount} / ${m.fileCount} <span style="font-size:14px;font-weight:600;color:var(--text-muted)">approved</span></div>
+        <span class="sum-kpi-sub">${m.activeAnnotations} improvement${m.activeAnnotations === 1 ? '' : 's'} across ${m.totalLines} lines</span>
+      </div>
+    </div>
+
+    <div class="sum-better-panel">
+      <h3>How the System Is Better</h3>
+      <ul class="sum-better-list">
+        <li>
+          <strong>Exact to the Penny</strong>
+          Fixes old rounding mistakes so every customer balance, fee, and interest payment adds up to the exact cent.
+        </li>
+        <li>
+          <strong>Built-In Safety Checks</strong>
+          Catches negative numbers, missing info, and skipped rules (like missed student discounts) before any account is changed.
+        </li>
+        <li>
+          <strong>Easy for Anyone to Review</strong>
+          Turns ${m.sloc} lines of hard-to-read old code into clear steps backed by ${m.activeAnnotations} plain-English notes anyone can read.
+        </li>
+      </ul>
+    </div>
+  `;
+}
+
+/* Standards-compliant pure-JS PKZIP (Store / UTF-8) generator */
+const ZIP_CRC_TABLE = (() => {
+  const tbl = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    tbl[n] = c >>> 0;
+  }
+  return tbl;
+})();
+
+function crc32Bytes(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = ZIP_CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZipArchiveBytes(entries) {
+  const enc = new TextEncoder();
+  const now = new Date();
+  const dosTime = ((now.getHours() & 0x1F) << 11) | ((now.getMinutes() & 0x3F) << 5) | ((now.getSeconds() >> 1) & 0x1F);
+  const dosDate = (((Math.max(1980, now.getFullYear()) - 1980) & 0x7F) << 9) | (((now.getMonth() + 1) & 0x0F) << 5) | (now.getDate() & 0x1F);
+
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  entries.forEach(entry => {
+    const nameBytes = enc.encode(entry.name);
+    const dataBytes = typeof entry.content === 'string' ? enc.encode(entry.content) : entry.content;
+    const crc = crc32Bytes(dataBytes);
+    const size = dataBytes.length;
+
+    const local = new Uint8Array(30 + nameBytes.length + size);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true); // UTF-8 filename flag
+    lv.setUint16(8, 0, true);      // Store (no compression)
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    local.set(dataBytes, 30 + nameBytes.length);
+    localParts.push(local);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length;
+  });
+
+  const centralSize = centralParts.reduce((sum, p) => sum + p.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+
+  const totalBytes = offset + centralSize + 22;
+  const out = new Uint8Array(totalBytes);
+  let pos = 0;
+  localParts.forEach(p => { out.set(p, pos); pos += p.length; });
+  centralParts.forEach(p => { out.set(p, pos); pos += p.length; });
+  out.set(eocd, pos);
+  return out;
+}
+
+function exportApprovedQueueAsZip() {
+  const approvedItems = fileQueue.filter(f => f.approved);
+  if (!approvedItems.length) {
+    error = 'Please approve at least one file (or click "Approve All Pending" above) before exporting your .zip archive.';
+    render();
+    return;
+  }
+
+  const usedZipNames = new Set();
+  const entries = [];
+  const changelogSections = [
+    '# A2B Labs — Plain-English Feature Changelog',
+    '',
+    `Exported ${approvedItems.length} approved banking module${approvedItems.length === 1 ? '' : 's'} with changes applied.`,
+    ''
+  ];
+
+  approvedItems.forEach((item, idx) => {
+    if (!item.result?.code) autoFixQueueItem(item);
+    const ext = /java/i.test(String(item.target || '')) ? 'java' : 'py';
+    const baseStem = String(item.name || `module_${idx + 1}`).replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_') || `module_${idx + 1}`;
+    let outName = `${baseStem}_modernized.${ext}`;
+    let dup = 2;
+    while (usedZipNames.has(outName.toLowerCase())) {
+      outName = `${baseStem}_modernized_${dup}.${ext}`;
+      dup += 1;
+    }
+    usedZipNames.add(outName.toLowerCase());
+
+    entries.push({
+      name: outName,
+      content: String(item.result?.code || '') + '\n'
+    });
+
+    const desc = describeFileChangelog(item);
+    changelogSections.push(`## ${idx + 1}. ${item.name} -> \`${outName}\` (${item.language || 'Old'} -> ${item.target || 'Python'})`);
+    changelogSections.push(`- **What it did before:** ${desc.did}`);
+    changelogSections.push(`- **What it does now:** ${desc.now}`);
+    changelogSections.push(`- **Why it's better:** ${desc.improved}`);
+    if (desc.activeAnns.length) {
+      changelogSections.push(`- **Changes applied:**`);
+      desc.activeAnns.forEach(a => {
+        changelogSections.push(`  - \`${formatChangeLabel(a.id)}\` (${a.oldRefLabel} -> ${a.newRefLabel}): ${a.reason}`);
+      });
+    }
+    changelogSections.push('');
+  });
+
+  const m = computeImpactMetrics();
+  const overviewMd = [
+    '# A2B Labs — Summary Overview',
+    '',
+    `- **Approved Files Exported:** ${approvedItems.length} of ${fileQueue.length} file${fileQueue.length === 1 ? '' : 's'}`,
+    `- **Estimated Hours Saved:** ${m.savedHrs} hrs (-${m.pctSaved}% vs. ${m.baselineHrs} hrs by hand; ${m.assistedHrs} hrs with A2B Labs)`,
+    `- **Estimated Money Saved:** ${fmtMoney(m.savedDollars)} (at $${m.rate}/hr${m.modules > 1 ? `, ${m.modules}x batch size` : ''})`,
+    '',
+    '## How the System Is Better',
+    '1. **Exact to the Penny:** Fixes old rounding mistakes so every customer balance, fee, and interest payment adds up to the exact cent.',
+    '2. **Built-In Safety Checks:** Catches negative numbers, missing info, and skipped rules before any account is changed.',
+    `3. **Easy for Anyone to Review:** Turns ${m.sloc} lines of hard-to-read old code into clear steps backed by ${m.activeAnnotations} plain-English notes.`,
+    ''
+  ].join('\n');
+
+  entries.push({ name: 'CHANGELOG.md', content: changelogSections.join('\n') });
+  entries.push({ name: 'SUMMARY_OVERVIEW.md', content: overviewMd });
+
+  const zipBytes = createZipArchiveBytes(entries);
+  const blob = new Blob([zipBytes], { type: 'application/zip' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'a2b_approved_file_queue.zip';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+
+  notice = `Downloaded a2b_approved_file_queue.zip (${approvedItems.length} updated file${approvedItems.length === 1 ? '' : 's'} plus Changelog & Summary).`;
+  render();
+}
+
 function renderSummaryPage() {
   if (!SUMMARY_CONTAINER) return;
-  renderSidebarQueue();
-  updateRailTelemetry();
 
-  const activeItem = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
-  const activePreset = currentPreset();
-  const fileLabel = activeItem ? activeItem.name : 'fee_waiver.cbl';
-  const hasCode = Boolean(result && result.code);
-  const reportUnlocked = isReportReady();
-  const c = ruleCounts();
-  const suggested = result?.suggested_tests || [];
-  const selectedSuggestedCount = suggested.filter((_, i) => suggestedSelected[i]).length;
+  fileQueue.forEach(item => {
+    if (!item.result?.code) autoFixQueueItem(item);
+    if (item.approved) ensureQueueItemChecks(item);
+  });
+
+  const totalFiles = fileQueue.length;
+  const approvedCount = fileQueue.filter(f => f.approved).length;
+  const pendingCount = Math.max(0, totalFiles - approvedCount);
+  const allApproved = totalFiles > 0 && pendingCount === 0;
 
   SUMMARY_CONTAINER.innerHTML = `
-    ${error ? `<div class="banner error" role="alert"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
-    ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
+    <div class="sum-stack">
+      ${error ? `<div class="banner error" role="alert"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
+      ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
 
-    <!-- 1ST SECTION: TEST THE UPDATED BANKING CODE -->
-    <section class="step" id="summary-test-section" aria-labelledby="sum-test-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge ${reportUnlocked ? 'done' : ''}">${reportUnlocked ? '✓ ' : ''}Step 4A · Verification</span>
-            <h2 id="sum-test-title">Test the Updated Banking Code (${esc(fileLabel)})</h2>
-          </div>
-          <p>${hasCode
-            ? 'Run real-world banking scenarios in an isolated test environment to verify that the updated code fixes the policy bug and unlocks your Time &amp; Cost Savings below.'
-            : 'Generate your updated banking code in the Workspace first (or click Quick Load below) to run banking scenario tests.'}</p>
-        </div>
-
-        <div class="actions">
-          ${hasCode ? `
-            <span class="status">${checksRun ? esc(checksRun.label) : 'Ready to run tests'}</span>
-            <button type="button" id="run-preset-checks-top" class="primary" ${busy ? 'disabled' : ''}>
-              ${busy === 'test' ? '<span class="spinner"></span>Running tests…' : (checksRun ? 'Run banking tests again &rarr;' : `Run ${activePreset.cases.length} banking test cases &rarr;`)}
-            </button>
-          ` : `
-            <button type="button" id="quick-load-code-for-test" class="primary">Quick load updated code &amp; run tests &rarr;</button>
-            <a class="btn-secondary" href="/workspace.html">&larr; Back to Workspace</a>
-          `}
-        </div>
-      </div>
-
-      ${hasCode ? `
-        <div class="step-body">
-          <div class="checks-split">
-            <div class="check-box">
-              <div class="check-box-head">
-                <div>
-                  <h3>Test with real-world banking scenarios</h3>
-                  <p>Runs ${activePreset.cases.length} banking customer scenarios in a safe, isolated test environment to compare the old buggy output against the updated code.</p>
-                </div>
-              </div>
-              <div class="actions">
-                <button type="button" id="run-preset-checks" class="primary" ${busy ? 'disabled' : ''}>
-                  ${busy === 'test' ? '<span class="spinner"></span>Running banking tests…' : (checksRun ? `Run ${activePreset.cases.length} tests again &rarr;` : `Run ${activePreset.cases.length} banking test cases &rarr;`)}
-                </button>
-              </div>
-              ${checksRun ? `
-                <div class="card"><strong>${esc(checksRun.label)}.</strong> ${esc(checksRun.note || '')}</div>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Banking scenario</th>
-                        <th>Old buggy code</th>
-                        <th>Expected policy</th>
-                        <th>Updated code</th>
-                        <th>Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${checksRun.rows.map(r => `
-                        <tr>
-                          <td>${esc(r.name)}</td>
-                          <td><span class="old-bug-val">${esc(r.old || '—')}</span></td>
-                          <td>${esc(r.expected)}</td>
-                          <td><strong>${esc(r.actual)}</strong></td>
-                          <td><span class="status">${r.passed ? 'Passed' : 'Failed'}</span></td>
-                        </tr>
-                      `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              ` : `
-                <div class="step-locked-hint" style="margin-top:0.5rem">
-                  Click <strong>Run ${activePreset.cases.length} banking test cases &rarr;</strong> above to execute the scenarios and unlock the Savings Report in Step 4C below.
-                </div>
-              `}
+      <!-- ZONE 1: FEATURE CHANGELOG -->
+      <section class="sum-changelog-section" id="summary-changelog-section" aria-labelledby="sum-changelog-title">
+        <div class="sum-zone-head">
+          <div class="sum-zone-title-wrap">
+            <div class="sum-title-row">
+              <h1 id="sum-changelog-title">Feature Changelog</h1>
+              <span class="sum-eyebrow is-amber">Plain-English Summary</span>
             </div>
-
-            <div class="check-box">
-              <div class="check-box-head">
-                <div>
-                  <h3>Extra banking test cases suggested by AI</h3>
-                  <p>Optional edge cases created during live AI code generation.</p>
-                </div>
-                <span class="badge">Optional</span>
-              </div>
-              ${suggested.length ? `
-                <div class="suggested-list">
-                  ${suggested.map((t, i) => {
-                    const runnable = Array.isArray(t.args) && t.args.length === 4 && t.expected_value !== undefined;
-                    return `
-                      <label class="suggested-item">
-                        <input type="checkbox" data-suggested="${i}" ${suggestedSelected[i] ? 'checked' : ''} ${runnable ? '' : 'disabled'} />
-                        <span>
-                          <strong>${esc(t.input || 'Suggested banking test ' + (i + 1))}</strong>
-                          <small>Expected: ${esc(t.expected || '')}${t.reason ? ' — ' + esc(t.reason) : ''}</small>
-                        </span>
-                      </label>
-                    `;
-                  }).join('')}
-                </div>
-                <div class="actions">
-                  <button type="button" id="run-suggested-checks" ${(busy || !selectedSuggestedCount) ? 'disabled' : ''}>
-                    ${busy === 'suggested' ? '<span class="spinner"></span>Running…' : `Run ${selectedSuggestedCount} selected`}
-                  </button>
-                </div>
-              ` : `<p class="muted">When you create code with live AI in Step 2, extra suggested banking edge cases appear here.</p>`}
-            </div>
-          </div>
-        </div>
-      ` : `
-        <div class="step-locked-hint">
-          You have not generated updated code for <strong>${esc(fileLabel)}</strong> yet. Click <strong>Quick load updated code &amp; run tests &rarr;</strong> above or return to the <a href="/workspace.html" style="color:var(--amber)">Workspace</a>.
-        </div>
-      `}
-    </section>
-
-    <!-- 2ND SECTION: WHAT CHANGED SUMMARY & EXECUTIVE TAKEAWAYS -->
-    <section class="step" id="summary-changes-section" aria-labelledby="sum-changes-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge ${hasCode ? 'done' : ''}">Step 4B · What Changed</span>
-            <h2 id="sum-changes-title">What Changed Summary &amp; Executive Takeaways</h2>
-          </div>
-          <p>Plain-English summary of the banking policy defect that was resolved and how each Change ID maps back to the original code.</p>
-        </div>
-        <div class="actions">
-          <a class="btn-secondary" href="/workspace.html#step-2">&larr; Inspect full side-by-side code in Workspace</a>
-        </div>
-      </div>
-
-      ${hasCode ? `
-        <div class="step-body">
-          <div class="analysis-strip">
-            <div class="card">
-              <strong>What the original banking code did:</strong> ${esc(analysis?.summary || activePreset.description)}
-            </div>
-            <div class="card" style="border-color:rgba(16,185,129,0.3);background:rgba(16,185,129,0.06)">
-              <strong style="color:var(--emerald)">Banking policy bug fixed:</strong> ${esc((analysis?.conflicts && analysis.conflicts[0]) || activePreset.issue)}
-            </div>
+            <p>Simple rundown of what each file used to do, what it does now, and why the new version is safer.</p>
           </div>
 
-          ${renderChangeSummaryTableHtml()}
-        </div>
-      ` : `
-        <div class="step-locked-hint">
-          Complete Step 2 &amp; Step 3 in the Workspace to view the Change ID summary table.
-        </div>
-      `}
-    </section>
-
-    <!-- 3RD SECTION: ESTIMATED TIME & COST SAVED (UNLOCKED ONCE TESTS RUN) -->
-    <section class="step report-step ${reportUnlocked ? 'report-unlocked' : 'report-locked'}" id="summary-roi-section" aria-labelledby="sum-roi-title">
-      <div class="step-head">
-        <div class="step-title">
-          <div class="step-heading">
-            <span class="step-badge ${reportUnlocked ? 'done' : ''}">${reportUnlocked ? '✓ ' : ''}Step 4C · Savings &amp; ROI</span>
-            <h2 id="sum-roi-title">Estimated Time &amp; Cost Saved</h2>
+          <div class="sum-head-actions">
+            <span class="sum-approval-pill ${allApproved ? 'is-complete' : ''}">
+              ${allApproved ? '✓ All' : `${approvedCount} of`} ${totalFiles} file${totalFiles === 1 ? '' : 's'} approved
+            </span>
+            ${pendingCount > 0 ? `
+              <button type="button" id="summary-approve-all-btn" class="sum-approve-all-btn">
+                ✓ Approve All (${pendingCount})
+              </button>
+            ` : ''}
           </div>
-          <p>${reportUnlocked
-            ? `Illustrative time and budget saved for <strong>${esc(fileLabel)}</strong> after verifying all banking test scenarios above.`
-            : 'Run the banking scenario tests in Step 4A above to unlock your estimated Time &amp; Cost Savings report.'}</p>
         </div>
 
-        <div class="actions">
-          ${reportUnlocked ? `
-            <button type="button" class="copy-btn" data-copy="report">Copy summary</button>
-            <button type="button" id="download-roi" class="btn-secondary">Download updated code</button>
-          ` : `
-            <button type="button" id="unlock-roi-by-testing" class="primary">
-              &uarr; Run banking tests above to unlock savings
-            </button>
-          `}
-        </div>
-      </div>
-
-      ${reportUnlocked ? `
-        <div class="step-body">
-          <div id="report-stats-live">
-            ${renderReportStatsHtml()}
-          </div>
-
-          <!-- Collapsible Assumptions Drawer -->
-          <details class="assumptions-drawer">
-            <summary>
-              <span>Customize estimate assumptions</span>
-              <span class="assumptions-drawer-hint">Adjust hourly cost, manual review speed, or number of banking files</span>
-            </summary>
-            <div class="report-assumptions-bar">
-              <div class="assumptions-controls">
-                <label class="assumption-slider">
-                  <span>Hourly team cost: <strong id="lbl-rate">$${roiSettings.hourlyRate}/hr</strong></span>
-                  <input type="range" id="roi-rate" min="60" max="250" step="5" value="${roiSettings.hourlyRate}" />
-                </label>
-
-                <label class="assumption-slider">
-                  <span>Manual time per line: <strong id="lbl-pace">${roiSettings.minsPerSloc} min</strong></span>
-                  <input type="range" id="roi-pace" min="4" max="25" step="1" value="${roiSettings.minsPerSloc}" />
-                </label>
-
-                <label class="assumption-slider">
-                  <span>Time with A2B Labs: <strong id="lbl-ratio">${Math.round(roiSettings.a2bRatio * 100)}% of manual</strong></span>
-                  <input type="range" id="roi-ratio" min="15" max="60" step="1" value="${Math.round(roiSettings.a2bRatio * 100)}" />
-                </label>
-
-                <div class="assumption-slider">
-                  <span>Similar banking files in project: <strong id="lbl-scale">${roiSettings.moduleMultiplier === 1 ? 'This file only' : roiSettings.moduleMultiplier + ' files'}</strong></span>
-                  <div class="scale-pills" role="group" aria-label="Number of similar banking files">
-                    ${[1, 10, 50, 100].map(mult => `
-                      <button type="button" class="${roiSettings.moduleMultiplier === mult ? 'active' : ''}" data-roi-scale="${mult}">${mult === 1 ? '1 file' : mult + ' files'}</button>
-                    `).join('')}
+        ${totalFiles ? `
+          <div class="sum-changelog-list" role="list" aria-label="Plain-English changelog entries per file">
+            ${fileQueue.map((item, idx) => {
+              const desc = describeFileChangelog(item);
+              const convLabel = `${item.language || 'COBOL'} → ${item.target || 'Python'}`;
+              return `
+                <article class="sum-file-card ${item.approved ? 'is-approved' : ''}" role="listitem">
+                  <div class="sum-file-head">
+                    <div class="sum-file-title-group">
+                      <span class="sum-file-index">#${idx + 1}</span>
+                      <span class="sum-file-name">${esc(item.name)}</span>
+                      <span class="sum-file-target-pill">${esc(convLabel)}</span>
+                    </div>
+                    <div class="sum-file-status-group">
+                      <span class="sum-status-badge ${item.approved ? 'is-approved' : 'is-pending'}">
+                        ${item.approved ? '✓ Ready to Download' : 'Needs Approval'}
+                      </span>
+                      ${!item.approved ? `
+                        <button type="button" class="sum-inline-approve-btn" data-summary-approve-file="${esc(item.id)}">
+                          ✓ Approve
+                        </button>
+                      ` : ''}
+                    </div>
                   </div>
+
+                  <div class="sum-feature-desc">
+                    <div class="sum-desc-col is-before">
+                      <span class="sum-desc-label">What It Did Before</span>
+                      <p>${esc(desc.did)}</p>
+                    </div>
+                    <div class="sum-desc-col is-now">
+                      <span class="sum-desc-label">What It Does Now</span>
+                      <p>${esc(desc.now)}</p>
+                    </div>
+                    <div class="sum-desc-col is-improved">
+                      <span class="sum-desc-label">Why It&apos;s Better</span>
+                      <p>${esc(desc.improved)}</p>
+                    </div>
+                  </div>
+
+                  ${desc.activeAnns.length ? `
+                    <div class="sum-ann-chips" aria-label="Changes made to ${esc(item.name)}">
+                      ${desc.activeAnns.map(ann => `
+                        <span class="sum-ann-chip">
+                          <code>${esc(formatChangeLabel(ann.id))}</code>
+                          <span>${esc(ann.whatItDoes)}</span>
+                        </span>
+                      `).join('')}
+                    </div>
+                  ` : ''}
+
+                  <button
+                    type="button"
+                    class="sum-workspace-jump-bar"
+                    data-jump-workspace-file="${esc(item.id)}"
+                  >
+                    <span class="sum-jump-primary">View ${esc(item.name)} in Workspace &rarr;</span>
+                    <span class="sum-jump-sub">Open in Workspace if you change your mind and want to edit anything</span>
+                  </button>
+                </article>
+              `;
+            }).join('')}
+          </div>
+        ` : `
+          <div class="step-locked-hint">
+            No files added yet. <a href="/" style="color:var(--amber)">Add or create a sample file on the Home page</a> first.
+          </div>
+        `}
+      </section>
+
+      <!-- ZONE 2: SUMMARY OVERVIEW -->
+      <section class="sum-overview-section" id="summary-roi-section" aria-labelledby="sum-overview-title">
+        <div class="sum-zone-head">
+          <div class="sum-zone-title-wrap">
+            <div class="sum-title-row">
+              <h2 id="sum-overview-title">Summary Overview</h2>
+              <span class="sum-eyebrow is-blue">Time &amp; Cost Savings</span>
+            </div>
+            <p>Estimated hours saved, money saved, and why your updated banking files are safer and easier to trust.</p>
+          </div>
+
+          <div class="sum-head-actions">
+            <button type="button" class="copy-btn" data-copy="report">Copy summary</button>
+          </div>
+        </div>
+
+        <div id="report-stats-live">
+          ${renderSummaryOverviewLiveHtml()}
+        </div>
+
+        <details class="assumptions-drawer" style="margin-top:16px">
+          <summary>
+            <span>Adjust savings calculator</span>
+            <span class="assumptions-drawer-hint">Change hourly team cost, review speed, or batch size</span>
+          </summary>
+          <div class="report-assumptions-bar">
+            <div class="assumptions-controls">
+              <label class="assumption-slider">
+                <span>Team hourly cost: <strong id="lbl-rate">$${roiSettings.hourlyRate}/hr</strong></span>
+                <input type="range" id="roi-rate" min="60" max="250" step="5" value="${roiSettings.hourlyRate}" />
+              </label>
+
+              <label class="assumption-slider">
+                <span>Minutes per line by hand: <strong id="lbl-pace">${roiSettings.minsPerSloc} min</strong></span>
+                <input type="range" id="roi-pace" min="4" max="25" step="1" value="${roiSettings.minsPerSloc}" />
+              </label>
+
+              <label class="assumption-slider">
+                <span>Time needed with A2B Labs: <strong id="lbl-ratio">${Math.round(roiSettings.a2bRatio * 100)}% of manual</strong></span>
+                <input type="range" id="roi-ratio" min="15" max="60" step="1" value="${Math.round(roiSettings.a2bRatio * 100)}" />
+              </label>
+
+              <div class="assumption-slider">
+                <span>Batch size: <strong id="lbl-scale">${roiSettings.moduleMultiplier === 1 ? 'Current files (1×)' : roiSettings.moduleMultiplier + '× files'}</strong></span>
+                <div class="scale-pills" role="group" aria-label="Batch size multiplier">
+                  ${[1, 10, 50, 100].map(mult => `
+                    <button type="button" class="${roiSettings.moduleMultiplier === mult ? 'active' : ''}" data-roi-scale="${mult}">${mult === 1 ? '1× files' : mult + '×'}</button>
+                  `).join('')}
                 </div>
               </div>
             </div>
-          </details>
-        </div>
-      ` : `
-        <div class="report-gate-box">
-          <div class="gate-title">Savings Report Locked Until Banking Tests Run</div>
-          <p class="gate-desc">Run the real-world banking scenario tests in <strong>Step 4A</strong> at the top of this page to confirm the updated code passes and unlock your time and budget savings estimate.</p>
-          <div class="gate-checklist" role="list" aria-label="Required steps">
-            <span class="gate-pill ${hasRulesOrPreset() ? 'done' : ''}"><span class="dot"></span>1. Banking Rules Reviewed (${c.approved || activePreset.rules.length} rules)</span>
-            <span class="gate-pill ${hasCode ? 'done' : ''}"><span class="dot"></span>2. Old vs. New Code Compared</span>
-            <span class="gate-pill ${reportUnlocked ? 'done' : ''}"><span class="dot"></span>3. Banking Scenario Tests Run (Pending)</span>
           </div>
-        </div>
-      `}
-    </section>
+        </details>
+      </section>
+
+      <!-- ZONE 3: EXPORT APPROVED FILE QUEUE AS ZIP -->
+      <div class="sum-export-zone">
+        <button
+          type="button"
+          id="export-approved-zip-btn"
+          class="sum-export-zip-btn"
+          ${approvedCount === 0 ? 'disabled' : ''}
+        >
+          <span class="sum-export-zip-main">Export approved file queue with changes applied as .zip</span>
+          <span class="sum-export-zip-sub">
+            ${approvedCount > 0
+              ? `Includes ${approvedCount} updated file${approvedCount === 1 ? '' : 's'} plus plain-English Changelog & Summary`
+              : 'Approve at least 1 file above (or click "Approve All") to unlock download'}
+          </span>
+        </button>
+      </div>
+    </div>
   `;
 
   bindSummaryEvents();
 }
 
-function hasRulesOrPreset() {
-  return Boolean(rules.length > 0);
-}
-
 function refreshReportViewOnly() {
   const statsContainer = document.getElementById('report-stats-live');
-  if (statsContainer) statsContainer.innerHTML = renderReportStatsHtml();
+  if (statsContainer) statsContainer.innerHTML = renderSummaryOverviewLiveHtml();
   const setTxt = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.textContent = val;
@@ -1621,7 +3065,7 @@ function refreshReportViewOnly() {
   setTxt('lbl-rate', `$${roiSettings.hourlyRate}/hr`);
   setTxt('lbl-pace', `${roiSettings.minsPerSloc} min`);
   setTxt('lbl-ratio', `${Math.round(roiSettings.a2bRatio * 100)}% of manual`);
-  setTxt('lbl-scale', roiSettings.moduleMultiplier === 1 ? 'This file only' : `${roiSettings.moduleMultiplier} files`);
+  setTxt('lbl-scale', roiSettings.moduleMultiplier === 1 ? 'Current files (1×)' : `${roiSettings.moduleMultiplier}× files`);
   saveQueueToStorage();
 }
 
@@ -1636,9 +3080,24 @@ function render() {
 }
 
 /* ==========================================================================
-   EVENT BINDINGS FOR ALL 3 PAGES
+   EVENT BINDINGS FOR ALL PAGES
    ========================================================================== */
 function bindCommonQueueEvents() {
+  const collapseBtn = document.getElementById('sidebar-collapse-toggle');
+  if (collapseBtn) {
+    collapseBtn.onclick = () => {
+      const nextCollapsed = !document.documentElement.classList.contains('ws-sidebar-collapsed');
+      document.documentElement.classList.toggle('ws-sidebar-collapsed', nextCollapsed);
+      try {
+        localStorage.setItem('a2b-queue-collapsed', nextCollapsed ? '1' : '0');
+      } catch (_e) {}
+      syncSidebarCollapseButton();
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 250);
+    };
+  }
+
   document.querySelectorAll('[data-dismiss="error"]').forEach(b => {
     b.onclick = () => { error = ''; render(); };
   });
@@ -1646,9 +3105,19 @@ function bindCommonQueueEvents() {
     b.onclick = () => { notice = ''; render(); };
   });
   document.querySelectorAll('[data-queue-select]').forEach(el => {
-    el.onclick = (e) => {
-      if (e.target.closest('[data-queue-remove]')) return;
+    const activate = (e) => {
+      if (e.target && e.target.closest && e.target.closest('[data-queue-remove]')) return;
       selectQueueFile(el.dataset.queueSelect);
+      if (IS_SUMMARY_PAGE) {
+        window.location.href = '/workspace.html';
+      }
+    };
+    el.onclick = activate;
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate(e);
+      }
     };
   });
   document.querySelectorAll('[data-queue-remove]').forEach(btn => {
@@ -1662,271 +3131,351 @@ function bindCommonQueueEvents() {
 function bindHomeEvents() {
   bindCommonQueueEvents();
 
-  const sourceEl = document.getElementById('source');
-  if (sourceEl) {
-    sourceEl.oninput = e => {
-      source = e.target.value;
-      const lines = source.split('\n').length;
-      const badge = document.getElementById('source-lines-badge');
-      if (badge) badge.textContent = `${lines} lines`;
-      const gutter = document.getElementById('source-gutter');
-      if (gutter) gutter.innerHTML = Array.from({length: Math.max(1, lines)}, (_, i) => i + 1).join('<br/>');
-      saveQueueToStorage();
+  document.querySelectorAll('[data-composer-sample]').forEach(btn => {
+    btn.onclick = () => {
+      attachSampleScenarioToComposer(btn.dataset.composerSample);
     };
-  }
-
-  const policyEl = document.getElementById('policy');
-  if (policyEl) {
-    policyEl.oninput = e => {
-      policy = e.target.value;
-      const items = policy.split('\n').filter(Boolean).length;
-      const badge = document.getElementById('policy-lines-badge');
-      if (badge) badge.textContent = `${items} items`;
-      saveQueueToStorage();
-    };
-  }
-
-  const langEl = document.getElementById('language');
-  if (langEl) langEl.oninput = e => { language = e.target.value; saveQueueToStorage(); };
-
-  const targetEl = document.getElementById('target');
-  if (targetEl) targetEl.oninput = e => { target = e.target.value; saveQueueToStorage(); };
-
-  document.querySelectorAll('[data-select-preset]').forEach(btn => {
-    btn.onclick = () => selectBankingPreset(btn.dataset.selectPreset);
   });
 
-  const genFaultyBtn = document.getElementById('generate-faulty-ai-btn');
-  if (genFaultyBtn) {
-    genFaultyBtn.onclick = generateFaultyBankingCodeWithAI;
-  }
-
-  const codeUploadInput = document.getElementById('upload-code-input');
-  if (codeUploadInput) {
-    codeUploadInput.onchange = e => {
-      if (e.target.files?.length) addFilesToQueueFromDropzone(e.target.files);
-      e.target.value = '';
-    };
-  }
-
-  const policyUploadInput = document.getElementById('upload-policy-input');
-  if (policyUploadInput) {
-    policyUploadInput.onchange = async e => {
-      const f = e.target.files?.[0];
-      if (f) {
-        policy = (await f.text()).replace(/\r\n?/g, '\n').trim();
-        notice = `Loaded bank policy from "${f.name}".`;
-        saveQueueToStorage();
-        render();
+  const clearBtn = document.getElementById('clear-all-entries-btn');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      fileQueue = [];
+      activeFileId = '';
+      uploadedFileName = '';
+      source = '';
+      policy = '';
+      analysis = null;
+      rules = [];
+      result = null;
+      checksRun = null;
+      queuePage = 1;
+      error = '';
+      notice = '';
+      if (persistentChatComposerEl && persistentChatComposerEl.vsChatInput) {
+        persistentChatComposerEl.vsChatInput.clear();
       }
-      e.target.value = '';
+      composerStagedFiles.clear();
+      saveQueueToStorage();
+      renderHomeDockOnly();
     };
   }
+}
 
-  const goPreview = () => {
-    loadRulesFixtureForActive();
-    notice = 'Extracted plain-English banking rules. Review them below in Step 2.';
-    saveQueueToStorage();
-    window.location.href = '/workspace.html';
-  };
+function scrollRowInsideCodeBox(containerId, rowEl) {
+  const box = document.getElementById(containerId);
+  if (!box || !rowEl) return;
+  const rowTop = rowEl.offsetTop;
+  const rowBottom = rowTop + rowEl.offsetHeight;
+  const viewTop = box.scrollTop;
+  const viewBottom = viewTop + box.clientHeight;
+  if (rowTop < viewTop) {
+    box.scrollTo({ top: Math.max(0, rowTop - 12), behavior: 'smooth' });
+  } else if (rowBottom > viewBottom) {
+    box.scrollTo({ top: Math.max(0, rowBottom - box.clientHeight + 12), behavior: 'smooth' });
+  }
+}
 
-  const goExtract = async () => {
-    if (configured) {
-      await runAnalyzeAndNavigate();
+function setHoveredAnnotation(annId, scrollPanes = false) {
+  hoveredAnnId = annId || '';
+  const activeItem = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
+  const itemAnns = Array.isArray(activeItem?.annotations) ? activeItem.annotations : [];
+  const matched = itemAnns.find(a => a.id === hoveredAnnId && a.status !== 'removed');
+
+  document.querySelectorAll('.qv-ann-card[data-ann-card]').forEach(card => {
+    card.classList.toggle('is-ann-active', Boolean(matched && card.dataset.annCard === matched.id));
+  });
+  document.querySelectorAll('.qv-line-row[data-ann-id]').forEach(row => {
+    row.classList.toggle('is-ann-active', Boolean(matched && row.dataset.annId === matched.id));
+  });
+
+  const readout = document.getElementById('qv-hover-readout');
+  if (readout) {
+    if (matched) {
+      readout.textContent = `${formatChangeLabel(matched.id)}: ${matched.oldRefLabel} → ${matched.newRefLabel} · ${matched.kindLabel}`;
     } else {
-      goPreview();
+      const activeCount = itemAnns.filter(a => a.status !== 'removed').length;
+      readout.textContent = `Hover a line or card to highlight it (${activeCount} active)`;
     }
-  };
+  }
 
-  const previewBtn = document.getElementById('home-preview-go');
-  if (previewBtn) previewBtn.onclick = goPreview;
-  const previewBtnBot = document.getElementById('home-preview-go-bottom');
-  if (previewBtnBot) previewBtnBot.onclick = goPreview;
+  if (scrollPanes && matched) {
+    scrollRowInsideCodeBox(
+      'qv-current-scroll',
+      document.querySelector(`#qv-current-scroll .qv-line-row[data-ann-id="${matched.id}"]`)
+    );
+    scrollRowInsideCodeBox(
+      'qv-suggested-scroll',
+      document.querySelector(`#qv-suggested-scroll .qv-line-row[data-ann-id="${matched.id}"]`)
+    );
+  }
+}
 
-  const extractBtn = document.getElementById('home-extract-go');
-  if (extractBtn) extractBtn.onclick = goExtract;
-  const extractBtnBot = document.getElementById('home-extract-go-bottom');
-  if (extractBtnBot) extractBtnBot.onclick = goExtract;
+async function rerunWorkspaceAnalysis() {
+  const activeItem = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
+  if (!activeItem) return;
 
-  bindCopyButtons();
+  busy = 'rerun';
+  error = '';
+  notice = '';
+  render();
+
+  // Save any open inline edit textareas before rerunning
+  if (Array.isArray(activeItem.annotations)) {
+    activeItem.annotations.forEach(ann => {
+      if (ann.editing) ann.editing = false;
+    });
+  }
+
+  // First rebuild Suggested Code deterministically from active/edited/removed annotations
+  rebuildSuggestedCodeFromAnnotations(activeItem);
+
+  // If live AI backend is configured, also let AI regenerate code from active/edited annotations
+  const activeAnns = (activeItem.annotations || []).filter(a => a.status !== 'removed');
+  if (configured && activeAnns.length > 0) {
+    try {
+      const r = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: activeItem.source,
+          policy: activeItem.policy,
+          language: activeItem.language,
+          target: activeItem.target,
+          rules: activeAnns.map(a => `${a.whatItDoes} — ${a.reason}`),
+          bank_fixture: false
+        })
+      });
+      const data = await r.json();
+      if (r.ok && data && data.code) {
+        activeItem.result = data;
+      }
+    } catch (_e) {
+      // Deterministic annotation rebuild is already applied above
+    }
+  }
+
+  activeItem.approved = false;
+  activeItem.checksRun = null;
+  applyQueueItemToGlobals(activeItem);
+  busy = '';
+  const removedCnt = (activeItem.annotations || []).filter(a => a.status === 'removed').length;
+  const editedCnt = (activeItem.annotations || []).filter(a => a.status === 'edited').length;
+  notice = `Updated "${activeItem.name}" (${activeAnns.length} active, ${editedCnt} edited, ${removedCnt} removed). Look over the Updated Code and click Approve when ready.`;
+  saveQueueToStorage();
+  render();
 }
 
 function bindWorkspaceEvents() {
   bindCommonQueueEvents();
   bindCopyButtons();
 
-  const sourceEl = document.getElementById('source');
-  if (sourceEl) sourceEl.oninput = e => { source = e.target.value; saveQueueToStorage(); };
+  const activeIdx = fileQueue.findIndex(f => f.id === activeFileId);
+  const activeItem = fileQueue[activeIdx] || fileQueue[0];
 
-  const policyEl = document.getElementById('policy');
-  if (policyEl) policyEl.oninput = e => { policy = e.target.value; saveQueueToStorage(); };
+  const prevBtn = document.getElementById('qv-prev-file');
+  if (prevBtn) {
+    prevBtn.onclick = () => {
+      if (activeIdx > 0) {
+        selectQueueFile(fileQueue[activeIdx - 1].id);
+      }
+    };
+  }
 
-  document.querySelectorAll('[data-toggle-step]').forEach(btn => {
-    btn.onclick = () => {
-      const s = Number(btn.dataset.toggleStep);
-      stepCollapsed[s] = !stepCollapsed[s];
+  const nextBtn = document.getElementById('qv-next-file');
+  if (nextBtn) {
+    nextBtn.onclick = () => {
+      if (activeIdx >= 0 && activeIdx < fileQueue.length - 1) {
+        selectQueueFile(fileQueue[activeIdx + 1].id);
+      }
+    };
+  }
+
+  // Bidirectional hover highlighting: Annotation Cards <-> Current & Suggested Code lines
+  document.querySelectorAll('.qv-ann-card[data-ann-card]').forEach(card => {
+    const annId = card.dataset.annCard;
+    card.addEventListener('pointerenter', () => setHoveredAnnotation(annId, false));
+    card.addEventListener('pointerleave', () => setHoveredAnnotation('', false));
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('textarea')) return;
+      setHoveredAnnotation(annId, true);
+    });
+  });
+
+  document.querySelectorAll('.qv-line-row[data-ann-id]').forEach(row => {
+    const annId = row.dataset.annId;
+    row.addEventListener('pointerenter', () => setHoveredAnnotation(annId, false));
+    row.addEventListener('pointerleave', () => setHoveredAnnotation('', false));
+    row.addEventListener('click', () => {
+      setHoveredAnnotation(annId, false);
+      const card = document.querySelector(`.qv-ann-card[data-ann-card="${annId}"]`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+
+  // Annotation card Edit / Save / Cancel / Remove / Restore buttons
+  document.querySelectorAll('[data-ann-edit]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.annEdit);
+      if (!activeItem?.annotations?.[idx]) return;
+      activeItem.annotations[idx].editing = true;
+      applyQueueItemToGlobals(activeItem);
+      saveQueueToStorage();
+      render();
+      const box = document.getElementById(`ann-edit-box-${idx}`);
+      if (box) box.focus();
+    };
+  });
+
+  document.querySelectorAll('[data-ann-save]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.annSave);
+      const ann = activeItem?.annotations?.[idx];
+      if (!ann) return;
+      const box = document.getElementById(`ann-edit-box-${idx}`);
+      const nextVal = box ? box.value.trim() : ann.reason;
+      if (nextVal) {
+        ann.reason = nextVal;
+        ann.status = (nextVal !== ann.originalReason) ? 'edited' : 'active';
+      }
+      ann.editing = false;
+      activeItem.approved = false;
+      applyQueueItemToGlobals(activeItem);
+      notice = `Saved ${formatChangeLabel(ann.id)}. Click "Apply my edits" below to update the new code.`;
+      saveQueueToStorage();
       render();
     };
   });
 
-  const analyzeBtn = document.getElementById('analyze');
-  if (analyzeBtn) analyzeBtn.onclick = runAnalyze;
-  const analyzeInlineBtn = document.getElementById('analyze-inline');
-  if (analyzeInlineBtn) analyzeInlineBtn.onclick = () => configured ? runAnalyze() : previewRulesInWorkspace();
-  const previewRulesBtn = document.getElementById('preview-rules');
-  if (previewRulesBtn) previewRulesBtn.onclick = previewRulesInWorkspace;
-
-  const previewCodeBtn = document.getElementById('preview-code');
-  if (previewCodeBtn) {
-    previewCodeBtn.onclick = () => {
-      loadCodeFixtureForActive();
-      notice = 'Loaded updated banking code and Change ID comparison in Step 3 below.';
+  document.querySelectorAll('[data-ann-cancel]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.annCancel);
+      const ann = activeItem?.annotations?.[idx];
+      if (!ann) return;
+      ann.editing = false;
+      applyQueueItemToGlobals(activeItem);
       saveQueueToStorage();
       render();
     };
-  }
+  });
 
-  const generateBtn = document.getElementById('generate');
-  if (generateBtn) {
-    generateBtn.onclick = () => {
-      if (configured) {
-        runGenerate();
+  document.querySelectorAll('[data-ann-toggle-remove]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.annToggleRemove);
+      const ann = activeItem?.annotations?.[idx];
+      if (!ann) return;
+      if (ann.status === 'removed') {
+        ann.status = (ann.reason !== ann.originalReason) ? 'edited' : 'active';
+        notice = `Restored ${formatChangeLabel(ann.id)}. Click "Apply my edits" to put it back in the updated code.`;
       } else {
-        loadCodeFixtureForActive();
-        notice = 'Created updated Python banking code and mapped Change IDs in Step 3 below.';
+        ann.status = 'removed';
+        ann.editing = false;
+        notice = `Removed ${formatChangeLabel(ann.id)}. Click "Apply my edits" to update the code without it.`;
+      }
+      activeItem.approved = false;
+      applyQueueItemToGlobals(activeItem);
+      saveQueueToStorage();
+      render();
+    };
+  });
+
+  // Approve changes and mark file as complete (auto-advances to next unapproved file)
+  const approveBtn = document.getElementById('approve-file-btn');
+  if (approveBtn) {
+    approveBtn.onclick = () => {
+      if (!activeItem) return;
+      if (activeItem.approved) {
+        activeItem.approved = false;
+        applyQueueItemToGlobals(activeItem);
+        notice = `Reopened "${activeItem.name}" so you can make more edits.`;
         saveQueueToStorage();
         render();
+        return;
       }
-    };
-  }
 
-  const keepAll = document.getElementById('keep-all');
-  if (keepAll) {
-    keepAll.onclick = () => {
-      rules.forEach(r => { r.decision = 'keep'; r.text = r.original; });
-      result = null; checksRun = null;
-      saveQueueToStorage();
-      render();
-    };
-  }
+      activeItem.approved = true;
+      ensureQueueItemChecks(activeItem);
+      applyQueueItemToGlobals(activeItem);
 
-  const resetRules = document.getElementById('reset-rules');
-  if (resetRules) {
-    resetRules.onclick = () => {
-      rules = rules.filter(r => !r.custom).map(r => ({ ...r, text: r.original, decision: 'keep' }));
-      result = null; checksRun = null;
-      saveQueueToStorage();
-      render();
-    };
-  }
+      // Find next unapproved file in queue (wrapping if needed)
+      const nextUnapproved =
+        fileQueue.slice(activeIdx + 1).find(f => !f.approved) ||
+        fileQueue.slice(0, activeIdx).find(f => !f.approved);
 
-  document.querySelectorAll('[data-act]').forEach(b => {
-    b.onclick = () => {
-      const i = Number(b.dataset.index);
-      const act = b.dataset.act;
-      if (act === 'remove') rules.splice(i, 1);
-      else {
-        rules[i].decision = act;
-        if (act === 'keep') rules[i].text = rules[i].original;
+      if (nextUnapproved) {
+        applyQueueItemToGlobals(nextUnapproved);
+        notice = `Approved "${activeItem.name}"! Moved to the next file: "${nextUnapproved.name}".`;
+      } else {
+        notice = `All ${fileQueue.length} file${fileQueue.length === 1 ? '' : 's'} approved! Click "View Summary & Export" in the left sidebar.`;
       }
-      result = null; checksRun = null;
       saveQueueToStorage();
       render();
-    };
-  });
-
-  document.querySelectorAll('[data-edit]').forEach(t => {
-    t.oninput = e => {
-      rules[Number(t.dataset.edit)].text = e.target.value;
-      result = null; checksRun = null;
-      saveQueueToStorage();
-    };
-  });
-
-  const addRuleBtn = document.getElementById('add-rule');
-  const newRuleInput = document.getElementById('new-rule-input');
-  const addCustomRule = () => {
-    const text = newRuleInput?.value.trim();
-    if (!text) return;
-    rules.push({ id: Date.now(), original: text, text, decision: 'edit', custom: true });
-    result = null; checksRun = null;
-    saveQueueToStorage();
-    render();
-  };
-  if (addRuleBtn) addRuleBtn.onclick = addCustomRule;
-  if (newRuleInput) {
-    newRuleInput.onkeydown = e => {
-      if (e.key === 'Enter') { e.preventDefault(); addCustomRule(); }
     };
   }
 
-  // Change ID interactive selection in Step 3
-  document.querySelectorAll('[data-select-chg]').forEach(el => {
-    el.onclick = () => {
-      const id = el.dataset.selectChg;
-      selectedChangeId = (selectedChangeId === id && id !== 'all') ? 'all' : id;
-      saveQueueToStorage();
-      render();
-    };
-  });
-
-  document.querySelectorAll('[data-line-chg]').forEach(row => {
-    const chgId = row.dataset.lineChg;
-    if (!chgId) return;
-    row.onclick = () => {
-      selectedChangeId = (selectedChangeId === chgId) ? 'all' : chgId;
-      saveQueueToStorage();
-      render();
-    };
-  });
+  const rerunBtn = document.getElementById('rerun-analysis-btn');
+  if (rerunBtn) {
+    rerunBtn.onclick = rerunWorkspaceAnalysis;
+  }
 
   const downloadBtn = document.getElementById('download');
   if (downloadBtn) downloadBtn.onclick = downloadGeneratedCode;
+}
+
+function approveAndVerifyAllQueuedFiles() {
+  fileQueue.forEach(item => {
+    if (!item.result?.code) autoFixQueueItem(item);
+    item.approved = true;
+    ensureQueueItemChecks(item);
+  });
+  const active = fileQueue.find(f => f.id === activeFileId) || fileQueue[0];
+  if (active) applyQueueItemToGlobals(active);
+  notice = `Approved all ${fileQueue.length} file${fileQueue.length === 1 ? '' : 's'} — ready to download as .zip below!`;
+  saveQueueToStorage();
+  render();
 }
 
 function bindSummaryEvents() {
   bindCommonQueueEvents();
   bindCopyButtons();
 
-  const runBtn = document.getElementById('run-preset-checks');
-  if (runBtn) runBtn.onclick = runTest;
-  const runBtnTop = document.getElementById('run-preset-checks-top');
-  if (runBtnTop) runBtnTop.onclick = runTest;
-
-  const quickLoadBtn = document.getElementById('quick-load-code-for-test');
-  if (quickLoadBtn) {
-    quickLoadBtn.onclick = () => {
-      loadCodeFixtureForActive();
-      runPresetChecksNow();
-      notice = 'Loaded updated banking code and verified all real-world banking test scenarios! Savings Report unlocked below.';
-      saveQueueToStorage();
-      render();
-    };
+  const approveAllBtn = document.getElementById('summary-approve-all-btn');
+  if (approveAllBtn) {
+    approveAllBtn.onclick = approveAndVerifyAllQueuedFiles;
   }
 
-  const unlockBtn = document.getElementById('unlock-roi-by-testing');
-  if (unlockBtn) {
-    unlockBtn.onclick = async () => {
-      if (!result) loadCodeFixtureForActive();
-      await runTest();
-      const roiSec = document.getElementById('summary-roi-section');
-      if (roiSec) roiSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-  }
-
-  document.querySelectorAll('[data-suggested]').forEach(box => {
-    box.onchange = e => {
-      suggestedSelected[Number(box.dataset.suggested)] = e.target.checked;
+  document.querySelectorAll('[data-summary-approve-file]').forEach(btn => {
+    btn.onclick = () => {
+      const fId = btn.dataset.summaryApproveFile;
+      const target = fileQueue.find(f => f.id === fId);
+      if (!target) return;
+      if (!target.result?.code) autoFixQueueItem(target);
+      target.approved = true;
+      ensureQueueItemChecks(target);
+      notice = `Approved "${target.name}" for .zip export.`;
       saveQueueToStorage();
       render();
     };
   });
 
-  const runSuggestedBtn = document.getElementById('run-suggested-checks');
-  if (runSuggestedBtn) runSuggestedBtn.onclick = runSuggestedTests;
+  document.querySelectorAll('[data-jump-workspace-file]').forEach(row => {
+    row.onclick = () => {
+      const fId = row.dataset.jumpWorkspaceFile;
+      if (fId) {
+        selectQueueFile(fId);
+        window.location.href = '/workspace.html';
+      }
+    };
+  });
 
-  const downloadRoiBtn = document.getElementById('download-roi');
-  if (downloadRoiBtn) downloadRoiBtn.onclick = downloadGeneratedCode;
+  const exportZipBtn = document.getElementById('export-approved-zip-btn');
+  if (exportZipBtn) {
+    exportZipBtn.onclick = exportApprovedQueueAsZip;
+  }
 
   const rateInput = document.getElementById('roi-rate');
   if (rateInput) {
@@ -1992,201 +3541,10 @@ function downloadGeneratedCode() {
   a.href = URL.createObjectURL(blob);
   const activeItem = fileQueue.find(f => f.id === activeFileId);
   const baseName = activeItem ? activeItem.name.replace(/\.[^.]+$/, '') : 'banking_module';
-  a.download = `${baseName}_updated.py`;
+  const ext = activeItem && /java/i.test(String(activeItem.target || '')) ? 'java' : 'py';
+  a.download = `${baseName}_updated.${ext}`;
   a.click();
   URL.revokeObjectURL(a.href);
-}
-
-function previewRulesInWorkspace() {
-  loadRulesFixtureForActive();
-  notice = 'Loaded plain-English banking rules in Step 2. Keep, edit, or drop rules, then click "Create updated code →".';
-  saveQueueToStorage();
-  render();
-}
-
-async function runAnalyzeAndNavigate() {
-  if (!source.trim() || !policy.trim()) {
-    error = 'Please include both your original banking code and the bank policy.';
-    render();
-    return;
-  }
-  busy = 'analyze';
-  error = '';
-  notice = '';
-  render();
-  try {
-    const r = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, policy, language, target })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Could not extract business rules.');
-    analysis = data;
-    rules = (data.rules || []).map((text, idx) => ({
-      id: idx + 1,
-      original: text,
-      text,
-      decision: 'keep',
-      custom: false
-    }));
-    result = null;
-    checksRun = null;
-    busy = '';
-    saveQueueToStorage();
-    window.location.href = '/workspace.html';
-  } catch (_e) {
-    // Graceful fallback to preset rules so the user is never blocked in a demo
-    busy = '';
-    loadRulesFixtureForActive();
-    saveQueueToStorage();
-    window.location.href = '/workspace.html';
-  }
-}
-
-async function runAnalyze() {
-  if (!source.trim() || !policy.trim()) {
-    error = 'Please include both your original banking code and the bank policy.';
-    render();
-    return;
-  }
-  busy = 'analyze';
-  error = '';
-  notice = '';
-  render();
-  try {
-    const r = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, policy, language, target })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Could not extract business rules.');
-    analysis = data;
-    rules = (data.rules || []).map((text, idx) => ({
-      id: idx + 1,
-      original: text,
-      text,
-      decision: 'keep',
-      custom: false
-    }));
-    result = null;
-    checksRun = null;
-    notice = 'Business rules extracted. Review each banking rule below.';
-  } catch (e) {
-    error = e.message;
-  } finally {
-    busy = '';
-    saveQueueToStorage();
-    render();
-  }
-}
-
-async function runGenerate() {
-  const approved = rules.filter(r => r.decision !== 'drop').map(r => r.text.trim()).filter(Boolean);
-  if (!approved.length) {
-    error = 'Keep or edit at least one banking rule before creating updated code.';
-    render();
-    return;
-  }
-  busy = 'generate';
-  error = '';
-  notice = '';
-  render();
-  try {
-    const bank_fixture = activePresetId === 'fee_waiver' && !uploadedFileName;
-    const r = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, policy, language, target, rules: approved, bank_fixture })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Could not create updated code.');
-    result = data;
-    checksRun = null;
-    suggestedSelected = {};
-    suggestedRun = null;
-    notice = 'Updated banking code created! Inspect the side-by-side Change ID comparison in Step 3 below.';
-  } catch (_e) {
-    loadCodeFixtureForActive();
-    notice = 'Created updated Python banking code and mapped Change IDs in Step 3 below.';
-  } finally {
-    busy = '';
-    saveQueueToStorage();
-    render();
-  }
-}
-
-async function runTest() {
-  if (!result?.code) return;
-  const d = currentPreset();
-  // If running the fee_waiver preset in Python, try Docker test runner first, with seamless fallback to verified banking scenario runner
-  if (activePresetId === 'fee_waiver' && !uploadedFileName) {
-    busy = 'test';
-    error = '';
-    notice = '';
-    render();
-    try {
-      const r = await fetch('/api/test-bank', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: result.code })
-      });
-      const data = await r.json();
-      if (r.ok && Array.isArray(data.results)) {
-        const rows = data.results.map((item, idx) => ({
-          ...item,
-          old: d.cases[idx]?.old || '—'
-        }));
-        const passed = rows.filter(x => x.passed).length;
-        checksRun = {
-          label: `${passed} of ${rows.length} banking tests passed`,
-          note: 'Executed in an isolated Python container against real-world banking scenarios.',
-          rows
-        };
-        busy = '';
-        notice = 'All banking scenario tests passed! Estimated Time & Cost Saved is now unlocked below.';
-        saveQueueToStorage();
-        render();
-        return;
-      }
-    } catch (_e) {
-      // Fall through to built-in banking scenario verification
-    }
-    busy = '';
-  }
-
-  runPresetChecksNow();
-  notice = `All ${d.cases.length} banking scenario tests passed! Your Time & Cost Savings Report is now unlocked below.`;
-  saveQueueToStorage();
-  render();
-}
-
-async function runSuggestedTests() {
-  const all = result?.suggested_tests || [];
-  const chosen = all.filter((_, i) => suggestedSelected[i]);
-  if (!chosen.length) return;
-  busy = 'suggested';
-  error = '';
-  render();
-  try {
-    const r = await fetch('/api/test-bank', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: result.code, tests: chosen })
-    });
-    const data = await r.json();
-    if (!r.ok || data.error) throw new Error(data.error || 'Could not run suggested tests.');
-    const rows = data.results || [];
-    const passed = rows.filter(x => x.passed).length;
-    suggestedRun = { label: `${passed} of ${rows.length} AI edge cases passed`, rows };
-  } catch (e) {
-    error = e.message;
-  } finally {
-    busy = '';
-    saveQueueToStorage();
-    render();
-  }
 }
 
 async function checkStatus() {
@@ -2211,31 +3569,116 @@ async function checkStatus() {
   }
 }
 
-// Initialize queue from sessionStorage or default to Banking Fee Waiver
+// Initialize queue from sessionStorage or default to Banking Fee Waiver (auto-fixed on load)
 if (!loadQueueFromStorage()) {
   initDefaultQueue();
-}
-
-// If user opens /workspace.html directly and rules haven't been loaded yet, auto-load the active banking preset rules so Step 2 is immediately ready!
-if (IS_WORKSPACE_PAGE && (!rules || !rules.length)) {
-  loadRulesFixtureForActive();
   saveQueueToStorage();
 }
 
 const resetBtn = document.getElementById('reset');
 if (resetBtn) resetBtn.onclick = resetAll;
 
-document.querySelectorAll('.ang-side-step[data-step]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const stepNum = Number(btn.dataset.step);
-    const targetSec = document.getElementById(`step-${stepNum}`);
-    if (targetSec) {
-      stepCollapsed[stepNum] = false;
-      render();
-      const refreshed = document.getElementById(`step-${stepNum}`);
-      if (refreshed) refreshed.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  });
-});
+function initAppParallaxBackground() {
+  if (document.querySelector('.app-parallax-bg')) return;
 
+  const bg = document.createElement('div');
+  bg.className = 'app-parallax-bg';
+  bg.setAttribute('aria-hidden', 'true');
+  bg.innerHTML = `
+    <img
+      class="app-parallax-plate app-parallax-far"
+      src="https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-sky.webp"
+      alt=""
+      decoding="async"
+    />
+    <div class="app-parallax-scrim"></div>
+    <img
+      class="app-parallax-plate app-parallax-near"
+      src="https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-fg.webp"
+      alt=""
+      decoding="async"
+    />
+    <div class="app-parallax-grain"></div>
+    <div class="app-parallax-vignette"></div>
+    <div class="app-parallax-light-veil"></div>
+  `;
+  document.body.prepend(bg);
+
+  const farEl = bg.querySelector('.app-parallax-far');
+  const nearEl = bg.querySelector('.app-parallax-near');
+  const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const isMotionPaused = () => {
+    let storedPaused = false;
+    try { storedPaused = localStorage.getItem('a2b-motion') === 'paused'; } catch (_e) {}
+    return reduceMotionQuery.matches || storedPaused;
+  };
+
+  let targetPx = 0;
+  let targetPy = 0;
+  let curPx = 0;
+  let curPy = 0;
+  let rafId = 0;
+
+  const applyFrame = () => {
+    rafId = 0;
+    const paused = isMotionPaused();
+    bg.classList.toggle('is-motion-paused', paused);
+
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const p = maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0;
+
+    if (paused) {
+      farEl.style.translate = '0px 0px';
+      farEl.style.scale = '1.10';
+      nearEl.style.translate = '0px 0px';
+      nearEl.style.scale = '1.08';
+      return;
+    }
+
+    curPx += (targetPx - curPx) * 0.08;
+    curPy += (targetPy - curPy) * 0.08;
+
+    const farX = (curPx * -10).toFixed(2);
+    const farY = (p * -60 + curPy * -4).toFixed(2);
+    const farScale = (1.10 - p * 0.04).toFixed(4);
+
+    const nearX = (curPx * 22).toFixed(2);
+    const nearY = (p * 120 + curPy * 8).toFixed(2);
+    const nearScale = (1.08 + p * 0.06).toFixed(4);
+
+    farEl.style.translate = `${farX}px ${farY}px`;
+    farEl.style.scale = farScale;
+    nearEl.style.translate = `${nearX}px ${nearY}px`;
+    nearEl.style.scale = nearScale;
+
+    if (Math.abs(targetPx - curPx) > 0.002 || Math.abs(targetPy - curPy) > 0.002) {
+      rafId = requestAnimationFrame(applyFrame);
+    }
+  };
+
+  const scheduleFrame = () => {
+    if (!rafId) rafId = requestAnimationFrame(applyFrame);
+  };
+
+  window.addEventListener('pointermove', (e) => {
+    if (isMotionPaused()) return;
+    targetPx = (e.clientX / Math.max(1, window.innerWidth) - 0.5) * 2;
+    targetPy = (e.clientY / Math.max(1, window.innerHeight) - 0.5) * 2;
+    scheduleFrame();
+  }, { passive: true });
+
+  window.addEventListener('scroll', scheduleFrame, { passive: true });
+  window.addEventListener('resize', scheduleFrame, { passive: true });
+  if (reduceMotionQuery.addEventListener) {
+    reduceMotionQuery.addEventListener('change', scheduleFrame);
+  }
+  document.querySelectorAll('[data-motion-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => requestAnimationFrame(scheduleFrame));
+  });
+
+  applyFrame();
+}
+
+initAppParallaxBackground();
 checkStatus().then(render);

@@ -3,16 +3,19 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="description" content="Modernize legacy banking code into plain-English business rules, compare old vs. new code with Change IDs, and test banking scenarios with confidence."/>
-  <title>A2B Labs — Banking Code Modernization &amp; Step 1 Workbench</title>
-  <script src="theme.js?v=angstrom-6"></script>
+  <meta name="description" content="Attach banking code files, paste legacy COBOL/SQL, or describe policy rules to auto-fix and inspect in the A2B Labs Workspace."/>
+  <title>A2B Labs</title>
+  <script src="theme.js?v=angstrom-31"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="preconnect" href="https://api.fontshare.com" crossorigin/>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Space+Mono&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="code-colors.css?v=angstrom-6"/>
-  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-6"/>
-  <link rel="stylesheet" href="angstrom.css?v=angstrom-6"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="code-colors.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-chat-input.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="vs-breadcrumb-trail.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-31"/>
 </head>
 <body class="home-bench-page">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -21,33 +24,45 @@
     <div class="ang-header-inner">
       <a href="/" class="ang-brand" aria-label="A2B Labs home">
         <div class="ang-brand-top">
-          <span class="ang-brand-dot"></span>
+          <svg class="ang-brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8" class="ang-logo-tile"/>
+            <circle cx="8.5" cy="19.5" r="2.5" class="ang-logo-node-a"/>
+            <path d="M12.2 19.5H19.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M9.5 14.5C12.2 9.2 19.8 9.2 22.5 14.5" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round"/>
+            <path d="M19.7 14.9L22.9 15.2L23.2 12" stroke="#f59e0b" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="21" y="17.1" width="4.8" height="4.8" rx="1.3" class="ang-logo-node-b"/>
+          </svg>
           <span>A2B Labs</span>
         </div>
-        <span class="ang-brand-sub">Banking Code Modernization</span>
       </a>
 
-      <nav class="ang-nav" aria-label="Main navigation">
-        <a href="/" aria-current="page">Step 1: Home</a>
-        <a href="/workspace.html">Workspace (Steps 2–3)</a>
-        <a href="/summary.html">Test &amp; Summary Report (Step 4)</a>
-        <a href="/how-it-works.html">How It Works</a>
-        <a href="/features.html">Features</a>
-        <a href="/examples.html">Banking Cases</a>
-        <a href="/privacy.html">Privacy</a>
+      <nav class="vs-breadcrumb-trail ang-center-nav" aria-label="Main navigation" data-max="4" data-sep="none">
+        <ol>
+          <li>
+            <a href="/" aria-current="page">Home</a>
+          </li>
+          <li>
+            <a href="/workspace.html">Workspace</a>
+            <ul>
+              <li><a href="/workspace.html">Review &amp; Edit Files</a></li>
+              <li><a href="/summary.html">Summary &amp; Export (.zip)</a></li>
+            </ul>
+          </li>
+          <li>
+            <a href="/about.html">About</a>
+            <ul>
+              <li><a href="/about.html#how-it-works">How It Works</a></li>
+              <li><a href="/about.html#features">Features</a></li>
+              <li><a href="/about.html#banking-cases">Banking Cases</a></li>
+              <li><a href="/about.html#privacy">Privacy</a></li>
+            </ul>
+          </li>
+        </ol>
       </nav>
 
       <div class="ang-header-tools">
-        <div class="ang-status-pill">
-          <span class="ang-pulse-wrap"><span class="ang-pulse-ring"></span><span class="ang-pulse-core"></span></span>
-          <span data-live-engine id="connection">AI Ready</span>
-        </div>
         <button class="ang-tool-btn" type="button" data-motion-toggle>⏸ Pause background</button>
         <button class="ang-tool-btn" type="button" data-theme-toggle>☀ Light mode</button>
-        <a class="ang-ws-launch-btn" href="/workspace.html">
-          <span>Go to Workspace</span>
-          <span class="material-symbols-outlined">arrow_forward</span>
-        </a>
       </div>
     </div>
   </header>
@@ -67,55 +82,15 @@
       <div class="ang-ambient-matrix" aria-hidden="true"></div>
       <div class="ang-hud-scrim" aria-hidden="true"></div>
 
-      <!-- Hero + Step 1 Workbench Frame over 3D Background -->
-      <div class="ang-hud-frame home-hud-scrollable">
+      <!-- Condensed Centered Chat Composer Over 3D Silicon Chip -->
+      <div class="ang-hud-frame home-hud-scrollable home-centered-frame home-composer-frame">
         <div class="ang-l-bracket ang-l-tl" aria-hidden="true"><i></i></div>
         <div class="ang-l-bracket ang-l-tr" aria-hidden="true"><i></i></div>
         <div class="ang-l-bracket ang-l-bl" aria-hidden="true"><i></i></div>
         <div class="ang-l-bracket ang-l-br" aria-hidden="true"><i></i></div>
 
-        <!-- Compact Banking Hero Intro -->
-        <div class="home-hero-compact">
-          <div class="ang-eyebrow-ribbon">
-            <span class="ang-eyebrow-bar"></span>
-            <span>Banking Modernization · Legacy COBOL → Plain-English Rules → Verified Python</span>
-          </div>
-          <h1 class="ang-hero-h1 home-h1-compact">Understand your old banking code.<br/>Update it with confidence.</h1>
-          <p class="ang-hero-lead home-lead-compact">
-            Start <strong>Step 1</strong> right here: drop your banking code files into the queue, or let AI generate faulty banking COBOL for testing and demos—then extract plain-English rules in the Workspace.
-          </p>
-        </div>
-
-        <!-- Step 1 Live Workbench Container on the Homescreen -->
-        <div id="home-step1-content" class="home-step1-container" aria-live="polite"></div>
-
-        <!-- Updated 4-Step Banking Walkthrough Strip -->
-        <div class="ang-hud-bottom home-step-strip-wrap">
-          <div class="ang-step-strip" aria-label="How A2B Labs works in 4 steps">
-            <div class="ang-step-card is-active-home-step">
-              <span class="ang-step-card-kicker">Step 1 · Here on Home</span>
-              <strong>Add or generate faulty banking code</strong>
-              <span>Drop banking files or use the AI Faulty Code Generator for instant demo testing.</span>
-            </div>
-
-            <div class="ang-step-card">
-              <span class="ang-step-card-kicker">Step 2 · In Workspace</span>
-              <strong>Keep, edit, or drop banking rules</strong>
-              <span>Review every business rule in plain English—no coding required.</span>
-            </div>
-
-            <div class="ang-step-card">
-              <span class="ang-step-card-kicker">Step 3 · In Workspace</span>
-              <strong>Compare Old vs. New Code (CHG IDs)</strong>
-              <span>Side-by-side code comparison where every change points back to the original lines.</span>
-            </div>
-
-            <div class="ang-step-card">
-              <span class="ang-step-card-kicker">Step 4 · Summary &amp; Report</span>
-              <strong>Test scenarios &amp; see savings</strong>
-              <span>Run real-world banking test cases to unlock your time and cost savings report.</span>
-            </div>
-          </div>
+        <div class="home-sketch-shell home-composer-shell">
+          <div id="home-step1-content" class="home-step1-container" aria-live="polite"></div>
         </div>
       </div>
     </div>
@@ -123,19 +98,20 @@
     <footer class="ang-footer">
       <div class="ang-footer-left">
         <span class="ang-brand-dot"></span>
-        <span>Banking Modernization Workbench · Includes AI Faulty Banking Code Generator for demos &amp; testing</span>
+        <span>Banking Modernization Helper &middot; Drop a file or describe what you want updated above</span>
       </div>
       <div class="ang-footer-right">
-        <span>No technical background required to review rules</span>
+        <span>Written in plain English &mdash; no coding experience needed</span>
       </div>
     </footer>
   </main>
 
-  <script src="fixtures.js?v=angstrom-6"></script>
-  <script src="code-colors.js?v=angstrom-6"></script>
-  <script src="vs-dropzone.js?v=angstrom-6"></script>
-  <script src="app.js?v=angstrom-6"></script>
+  <script src="fixtures.js?v=angstrom-31"></script>
+  <script src="code-colors.js?v=angstrom-31"></script>
+  <script src="vs-chat-input.js?v=angstrom-31"></script>
+  <script src="vs-breadcrumb-trail.js?v=angstrom-31"></script>
+  <script src="app.js?v=angstrom-31"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
-  <script src="macro-bench.js?v=angstrom-6"></script>
+  <script src="macro-bench.js?v=angstrom-31"></script>
 </body>
 </html>

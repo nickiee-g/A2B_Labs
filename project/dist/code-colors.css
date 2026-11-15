@@ -1,27 +1,33 @@
-/* Contrast-first editor palettes for Angstrom Obsidian (dark) & Cleanroom Stone (light) */
+/* Contrast-first editor palettes for Obsidian Mac Glass (dark) & Crisp macOS Daylight (light) */
 :root,
 :root[data-theme="dark"] {
-  --code-bg: #0b0b0e;
-  --code-chrome: #16161b;
-  --code-text: #e5e1e8;
-  --code-keyword: #ffb347;
-  --code-string: #86efac;
-  --code-number: #ffd7a9;
-  --code-comment: #8c7f70;
-  --code-function: #93c5fd;
-  --code-operator: #d6c3b0;
+  --code-bg: #0b0e17;
+  --code-chrome: #131826;
+  --code-text: #e2e8f0;
+  --code-keyword: #c792ea;   /* Soft violet/purple: import, def, if, return, MOVE, END-IF */
+  --code-function: #f5b042;  /* Warm amber/gold: function names, constructors */
+  --code-string: #eab354;    /* Warm gold-amber: string literals */
+  --code-type: #5eead4;      /* Crisp teal/cyan: types, classes, COBOL/SQL fields */
+  --code-number: #fb923c;    /* Warm coral/orange: numeric literals */
+  --code-prop: #94a3b8;      /* Slate-silver: named args, attributes */
+  --code-operator: #7dd3fc;  /* Crisp sky-cyan: >=, <=, ==, =, +, - */
+  --code-punc: #8b9bb4;      /* Muted cool gray: (), {}, :, , */
+  --code-comment: #6e7b96;   /* Muted slate italic: comments */
 }
 
 :root[data-theme="light"] {
-  --code-bg: #faf8f3;
-  --code-chrome: #e9e3d8;
-  --code-text: #1c1915;
-  --code-keyword: #b45309;
-  --code-string: #047857;
-  --code-number: #92400e;
-  --code-comment: #786c5c;
-  --code-function: #1d4ed8;
-  --code-operator: #574e42;
+  --code-bg: #ffffff;
+  --code-chrome: #f1f5f9;
+  --code-text: #0f172a;
+  --code-keyword: #7c3aed;
+  --code-function: #b45309;
+  --code-string: #9a3412;
+  --code-type: #0f766e;
+  --code-number: #c2410c;
+  --code-prop: #334155;
+  --code-operator: #0369a1;
+  --code-punc: #475569;
+  --code-comment: #64748b;
 }
 
 .workspace-page .code-panel pre.syntax-code,
@@ -37,12 +43,26 @@
   white-space: pre;
   overflow: auto;
 }
-.syntax-keyword { color: var(--code-keyword); font-weight: 600; }
-.syntax-string { color: var(--code-string); }
-.syntax-number { color: var(--code-number); }
-.syntax-comment { color: var(--code-comment); font-style: italic; }
-.syntax-function { color: var(--code-function); }
-.syntax-operator { color: var(--code-operator); }
+.syntax-keyword, .syn-kw { color: var(--code-keyword); font-weight: 600; }
+.syntax-function, .syn-fn { color: var(--code-function); font-weight: 600; }
+.syntax-string, .syn-str { color: var(--code-string); }
+.syn-type { color: var(--code-type); font-weight: 500; }
+.syntax-number, .syn-num { color: var(--code-number); font-weight: 500; }
+.syn-prop { color: var(--code-prop); }
+.syntax-operator, .syn-op { color: var(--code-operator); }
+.syn-punc { color: var(--code-punc); }
+.syn-var { color: var(--code-text); }
+.syntax-comment, .syn-comment { color: var(--code-comment); font-style: italic; }
+
+.ide-code-icon {
+  font-family: ui-monospace, SFMono-Regular, Menlo, 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--code-function);
+  letter-spacing: -0.5px;
+  margin-right: 4px;
+  opacity: 0.92;
+}
 
 .code-editor {
   position: relative;

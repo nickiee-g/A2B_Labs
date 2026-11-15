@@ -58,44 +58,48 @@ def monthly_fee(balance, deposits, student, age):
         kind: 'guard',
         kindLabel: 'Added Safety Check',
         oldRange: [1, 1],
-        oldRefLabel: 'Old L1 (Missing check)',
+        oldRefLabel: 'Old Line 1 (Missing check)',
         newRange: [3, 4],
-        newRefLabel: 'New L3–L4',
-        pointerText: '← CHG-01 · Added for Old L1 (Rejects negative inputs)',
-        summary: 'Added a safety check to reject negative balances, deposits, or ages—preventing invalid customer data that the old COBOL did not guard against.'
+        newRefLabel: 'New Lines 3–4',
+        pointerText: '← Note 1 · Added safety check (blocks negative inputs)',
+        whatItDoes: 'Checks that average balance, deposits, and customer age are valid non-negative numbers before doing any math.',
+        summary: 'Added a safety check to block negative balances, deposits, or ages so invalid customer numbers cannot slip through.'
       },
       {
         id: 'CHG-02',
         kind: 'keep',
-        kindLabel: 'Preserved Rule',
+        kindLabel: 'Kept Existing Rule',
         oldRange: [3, 7],
-        oldRefLabel: 'Old L3–L7',
+        oldRefLabel: 'Old Lines 3–7',
         newRange: [5, 6],
-        newRefLabel: 'New L5–L6',
-        pointerText: '← CHG-02 · From Old L3–L7 ($1,500 balance or $500 deposit)',
-        summary: 'Preserved the $0 fee waiver when average balance is at least $1,500 (Old L3–L4) or direct deposits total at least $500 (Old L6–L7).'
+        newRefLabel: 'New Lines 5–6',
+        pointerText: '← Note 2 · Kept $1,500 balance and $500 deposit waivers',
+        whatItDoes: 'Waives the $12 monthly fee when average balance is at least $1,500 or direct deposits total at least $500.',
+        summary: 'Kept the $0 fee waiver whenever average balance is at least $1,500 or direct deposits total at least $500.'
       },
       {
         id: 'CHG-03',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
+        kindLabel: 'Fixed Rule Mistake',
         oldRange: [8, 10],
-        oldRefLabel: 'Old L8–L10',
+        oldRefLabel: 'Old Lines 8–10',
         newRange: [7, 8],
-        newRefLabel: 'New L7–L8',
-        pointerText: '← CHG-03 · Fixes Old L8–L10 (Un-nested student waiver)',
-        summary: 'Moved the student under-25 waiver out from inside the $500 deposit IF-block (Old L8–L10) so eligible students receive the $0 fee on their own.'
+        newRefLabel: 'New Lines 7–8',
+        pointerText: '← Note 3 · Fixed student waiver check',
+        whatItDoes: 'Waives the $12 monthly fee for students under age 25.',
+        summary: 'Moved the student under-25 waiver out from inside the $500 direct-deposit check so qualifying students get their $0 fee automatically.'
       },
       {
         id: 'CHG-04',
         kind: 'keep',
-        kindLabel: 'Preserved Default',
+        kindLabel: 'Kept Standard Fee',
         oldRange: [2, 2],
-        oldRefLabel: 'Old L2',
+        oldRefLabel: 'Old Line 2',
         newRange: [9, 9],
-        newRefLabel: 'New L9',
-        pointerText: '← CHG-04 · From Old L2 (Default $12 monthly fee)',
-        summary: 'Keeps the standard $12 monthly fee when none of the three waiver conditions apply (replaces MOVE 12 TO MONTHLY-FEE in Old L2).'
+        newRefLabel: 'New Line 9',
+        pointerText: '← Note 4 · Kept standard $12 monthly fee',
+        whatItDoes: 'Applies the normal $12 monthly checking fee when none of the three waiver rules apply.',
+        summary: 'Keeps the standard $12 monthly fee when none of the three waiver rules apply.'
       }
     ]
   },
@@ -157,45 +161,49 @@ def overdraft_fee(checking_bal, savings_bal, opted_in, tx_amount):
         id: 'CHG-01',
         kind: 'guard',
         kindLabel: 'Added Safety Check',
-        oldRange: [1, 2],
-        oldRefLabel: 'Old L1–L2 (Missing check)',
+        oldRange: [1, 1],
+        oldRefLabel: 'Old Line 1 (Missing check)',
         newRange: [3, 4],
-        newRefLabel: 'New L3–L4',
-        pointerText: '← CHG-01 · Added for Old L1–L2 (Rejects negative amounts)',
-        summary: 'Added input validation so negative checking balances, savings balances, or transaction amounts are immediately rejected.'
+        newRefLabel: 'New Lines 3–4',
+        pointerText: '← Note 1 · Blocks negative amounts',
+        whatItDoes: 'Checks that checking balance, savings balance, and purchase amount are non-negative before checking overdraft fees.',
+        summary: 'Added a safety check so negative checking balances, savings balances, or purchase amounts are blocked right away.'
       },
       {
         id: 'CHG-02',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
-        oldRange: [3, 4],
-        oldRefLabel: 'Old L3–L4',
+        kindLabel: 'Fixed Rule Mistake',
+        oldRange: [2, 3],
+        oldRefLabel: 'Old Lines 2–3',
         newRange: [5, 7],
-        newRefLabel: 'New L5–L7',
-        pointerText: '← CHG-02 · Fixes Old L3–L4 (Enforces $50 Cushion Rule)',
-        summary: 'Calculates the exact shortfall and waives the fee ($0) when the shortfall is $50 or less, fixing Old L3–L4 which charged $35 on a $1 shortfall.'
+        newRefLabel: 'New Lines 5–7',
+        pointerText: '← Note 2 · Honors the $50 cushion rule',
+        whatItDoes: 'Calculates the checking shortfall and waives the overdraft fee ($0) if the account is short by $50 or less.',
+        summary: 'Checks how much checking is short and waives the fee ($0) when the shortfall is $50 or less, fixing the old rule that charged $35 even for a $1 shortfall.'
       },
       {
         id: 'CHG-03',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
+        kindLabel: 'Fixed Rule Mistake',
         oldRange: [5, 7],
-        oldRefLabel: 'Old L5–L7',
+        oldRefLabel: 'Old Lines 5–7',
         newRange: [8, 9],
-        newRefLabel: 'New L8–L9',
-        pointerText: '← CHG-03 · Fixes Old L5–L7 (Uses combined checking + savings)',
-        summary: 'Checks combined (checking_bal + savings_bal >= tx_amount) when opted in, fixing Old L5 which required savings alone to cover the entire purchase.'
+        newRefLabel: 'New Lines 8–9',
+        pointerText: '← Note 3 · Combines checking + savings balances',
+        whatItDoes: 'Checks linked Savings Protection using combined checking plus savings balances when the customer opted in.',
+        summary: 'Checks whether checking and savings combined cover the purchase when opted in, fixing the old rule that required savings alone to pay the full amount.'
       },
       {
         id: 'CHG-04',
         kind: 'keep',
-        kindLabel: 'Preserved Fee',
+        kindLabel: 'Kept Standard Fee',
         oldRange: [4, 4],
-        oldRefLabel: 'Old L4',
+        oldRefLabel: 'Old Line 4',
         newRange: [10, 10],
-        newRefLabel: 'New L10',
-        pointerText: '← CHG-04 · From Old L4 ($35 fee when unprotected)',
-        summary: 'Applies the $35 overdraft fee only after both the $50 Cushion Rule and Linked Savings Protection have been checked.'
+        newRefLabel: 'New Line 10',
+        pointerText: '← Note 4 · Charges $35 only when unprotected',
+        whatItDoes: 'Charges the standard $35 overdraft fee only when the shortfall exceeds $50 and linked savings cannot cover it.',
+        summary: 'Applies the $35 overdraft fee only after checking both the $50 cushion rule and linked savings protection.'
       }
     ]
   },
@@ -262,44 +270,48 @@ def wire_status(wire_amt, is_intl):
         kind: 'guard',
         kindLabel: 'Added Safety Check',
         oldRange: [1, 1],
-        oldRefLabel: 'Old L1 (Missing check)',
+        oldRefLabel: 'Old Line 1 (Missing check)',
         newRange: [3, 4],
-        newRefLabel: 'New L3–L4',
-        pointerText: '← CHG-01 · Added for Old L1 (Rejects <= $0 wires)',
-        summary: 'Rejects zero or negative wire amounts before evaluating approval thresholds (Old COBOL auto-approved negative amounts).'
+        newRefLabel: 'New Lines 3–4',
+        pointerText: '← Note 1 · Blocks $0 or negative wires',
+        whatItDoes: 'Checks that the wire transfer amount is greater than $0 before checking approval limits.',
+        summary: 'Stops zero or negative wire amounts before checking approval limits (the old file mistakenly approved negative amounts).'
       },
       {
         id: 'CHG-02',
         kind: 'keep',
-        kindLabel: 'Preserved Cap',
+        kindLabel: 'Kept Review Limit',
         oldRange: [2, 3],
-        oldRefLabel: 'Old L2–L3',
+        oldRefLabel: 'Old Lines 2–3',
         newRange: [5, 6],
-        newRefLabel: 'New L5–L6',
-        pointerText: '← CHG-02 · From Old L2–L3 ($100k executive hold)',
-        summary: 'Preserves the EXEC-HOLD compliance escalation for any wire transfer exceeding $100,000 (Old L2–L3).'
+        newRefLabel: 'New Lines 5–6',
+        pointerText: '← Note 2 · Kept $100k executive review hold',
+        whatItDoes: 'Places any wire transfer over $100,000 on executive compliance hold ("EXEC-HOLD").',
+        summary: 'Keeps the executive compliance hold for any wire transfer over $100,000.'
       },
       {
         id: 'CHG-03',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
-        oldRange: [5, 9],
-        oldRefLabel: 'Old L5–L9',
+        kindLabel: 'Fixed Rule Mistake',
+        oldRange: [8, 9],
+        oldRefLabel: 'Old Lines 8–9',
         newRange: [7, 8],
-        newRefLabel: 'New L7–L8',
-        pointerText: '← CHG-03 · Fixes Old L5–L9 (Checks $10k intl limit first)',
-        summary: 'Evaluates the $10,000 international wire limit before the $25,000 domestic check so $10k–$25k international wires require DUAL-APPROVAL.'
+        newRefLabel: 'New Lines 7–8',
+        pointerText: '← Note 3 · Checks $10k international limit first',
+        whatItDoes: 'Requires two-person sign-off ("DUAL-APPROVAL") for international wires over $10,000.',
+        summary: 'Checks the $10,000 international wire limit before the $25,000 domestic check so $10k–$25k international wires require two-person sign-off.'
       },
       {
         id: 'CHG-04',
         kind: 'keep',
-        kindLabel: 'Preserved Domestic Rule',
-        oldRange: [5, 11],
-        oldRefLabel: 'Old L5–L11',
+        kindLabel: 'Kept Domestic Rule',
+        oldRange: [5, 6],
+        oldRefLabel: 'Old Lines 5–6',
         newRange: [9, 11],
-        newRefLabel: 'New L9–L11',
-        pointerText: '← CHG-04 · From Old L5–L11 ($25k domestic threshold)',
-        summary: 'Requires DUAL-APPROVAL for domestic wires over $25,000 and returns APPROVED for qualifying lower-value wires.'
+        newRefLabel: 'New Lines 9–11',
+        pointerText: '← Note 4 · Kept $25k domestic limit',
+        whatItDoes: 'Requires two-person sign-off above $25,000 and auto-approves smaller qualifying wires ("APPROVED").',
+        summary: 'Requires two-person sign-off for domestic wires over $25,000 and auto-approves qualifying smaller wires.'
       }
     ]
   },
@@ -357,45 +369,49 @@ def effective_apr(base_apr, days_late, autopay):
         id: 'CHG-01',
         kind: 'guard',
         kindLabel: 'Added Safety Check',
-        oldRange: [1, 2],
-        oldRefLabel: 'Old L1–L2 (Missing check)',
+        oldRange: [1, 1],
+        oldRefLabel: 'Old Line 1 (Missing check)',
         newRange: [3, 4],
-        newRefLabel: 'New L3–L4',
-        pointerText: '← CHG-01 · Added for Old L1–L2 (Rejects negative inputs)',
-        summary: 'Added validation to reject negative base APRs or negative days-late counts.'
+        newRefLabel: 'New Lines 3–4',
+        pointerText: '← Note 1 · Blocks negative rates or days late',
+        whatItDoes: 'Checks that the base interest rate and days-late count are not negative before calculating.',
+        summary: 'Added a safety check to block negative interest rates or negative days-late counts.'
       },
       {
         id: 'CHG-02',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
+        kindLabel: 'Fixed Rule Mistake',
         oldRange: [3, 4],
-        oldRefLabel: 'Old L3–L4',
+        oldRefLabel: 'Old Lines 3–4',
         newRange: [5, 6],
-        newRefLabel: 'New L5–L6',
-        pointerText: '← CHG-02 · Fixes Old L3–L4 (Honors 15-day grace period)',
-        summary: 'Changed penalty trigger from DAYS-LATE > 0 (Old L3) to days_late > 15 so customers paying within the 15-day grace period keep their standard rate.'
+        newRefLabel: 'New Lines 5–6',
+        pointerText: '← Note 2 · Restores 15-day grace period',
+        whatItDoes: 'Applies the 24.0% penalty rate only when a payment is more than 15 days late.',
+        summary: 'Changed the late penalty trigger so borrowers who pay within the 15-day grace period keep their normal interest rate instead of getting hit on Day 1.'
       },
       {
         id: 'CHG-03',
         kind: 'fix',
-        kindLabel: 'Bug Fixed',
+        kindLabel: 'Fixed Rule Mistake',
         oldRange: [6, 8],
-        oldRefLabel: 'Old L6–L8',
+        oldRefLabel: 'Old Lines 6–8',
         newRange: [7, 8],
-        newRefLabel: 'New L7–L8',
-        pointerText: '← CHG-03 · Fixes Old L6–L8 (Autopay discount + 4.0% floor)',
-        summary: 'Applies the 0.5% Autopay discount during the grace period and enforces the 4.0% minimum APR floor.'
+        newRefLabel: 'New Lines 7–8',
+        pointerText: '← Note 3 · Applies autopay discount + 4.0% floor',
+        whatItDoes: 'Subtracts the 0.5% Autopay discount during the grace period while enforcing a 4.0% minimum rate.',
+        summary: 'Applies the 0.5% Autopay discount during the grace period while making sure the rate never drops below the 4.0% minimum.'
       },
       {
         id: 'CHG-04',
         kind: 'keep',
-        kindLabel: 'Preserved Base Rate',
+        kindLabel: 'Kept Base Rate',
         oldRange: [2, 2],
-        oldRefLabel: 'Old L2',
+        oldRefLabel: 'Old Line 2',
         newRange: [9, 9],
-        newRefLabel: 'New L9',
-        pointerText: '← CHG-04 · From Old L2 (Standard base APR)',
-        summary: 'Returns the customer base APR when not enrolled in Autopay and within the 15-day grace period.'
+        newRefLabel: 'New Line 9',
+        pointerText: '← Note 4 · Kept standard customer rate',
+        whatItDoes: 'Returns the borrower’s standard base interest rate when not on Autopay and within the 15-day grace period.',
+        summary: 'Keeps the borrower’s standard interest rate when they are not on Autopay and are within the 15-day grace period.'
       }
     ]
   }
