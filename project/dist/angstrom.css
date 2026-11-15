@@ -4891,6 +4891,18 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
   border-color: rgba(15, 23, 42, 0.15);
 }
 
+.qv-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qv-nav-btn.is-danger:hover:not(:disabled) {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-color);
+}
+
 .qv-nav-btn:hover:not(:disabled) {
   border-color: var(--amber-border);
   background: var(--amber-dim);
@@ -5146,9 +5158,197 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
   color: #312e81;
 }
 
+.qv-ann-head-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qv-note-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+}
+
+:root[data-theme="light"] .qv-note-stepper {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+.qv-note-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.qv-note-step-btn:hover:not(:disabled) {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.qv-note-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qv-note-step-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.ws-sidebar-empty {
+  padding: 14px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.ws-empty-prompt {
+  max-width: 620px;
+  margin: clamp(32px, 8vh, 84px) auto;
+  padding: 36px 28px;
+  border-radius: 18px;
+  background: rgba(16, 19, 28, 0.78);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  border: 1px solid var(--amber-border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+:root[data-theme="light"] .ws-empty-prompt {
+  background: rgba(255, 255, 255, 0.90);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.10);
+}
+
+.ws-empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  color: var(--amber);
+}
+
+.ws-empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.ws-empty-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  color: var(--amber);
+}
+
+.ws-empty-prompt h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.ws-empty-prompt p {
+  margin: 0;
+  max-width: 480px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ws-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ws-empty-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: var(--amber-fill);
+  color: var(--on-amber);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.ws-empty-primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.ws-empty-secondary {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-low);
+  color: var(--text-main);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+:root[data-theme="light"] .ws-empty-secondary {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+.ws-empty-secondary:hover {
+  border-color: var(--amber-fill);
+  background: var(--amber-dim);
+}
+
 .qv-annotation-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
@@ -5158,9 +5358,9 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
-  border-radius: 12px;
-  background: rgba(28, 27, 46, 0.72);
-  border: 1px solid rgba(199, 200, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(14, 20, 32, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.22);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -5174,18 +5374,98 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
   border-color: rgba(15, 23, 42, 0.12);
 }
 
+/* Dashboard Color Themes for Plain-English Change Notes */
+/* 1. Theme Keep / Core (Electric Cyan-Blue #38bdf8 / #2563eb / #1d4ed8) */
+.qv-ann-card.theme-keep {
+  background: linear-gradient(180deg, rgba(16, 26, 46, 0.85) 0%, rgba(10, 18, 34, 0.85) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  box-shadow: 0 4px 20px rgba(8, 14, 28, 0.40);
+}
+.qv-ann-card.theme-keep .qv-ann-id {
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35);
+}
+.qv-ann-card.theme-keep .qv-ann-kind {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(96, 165, 250, 0.35);
+  color: #60a5fa;
+}
+
+/* 2. Theme Modify / Fix (Vibrant Violet-Purple #a855f7 / #c084fc) */
+.qv-ann-card.theme-modify {
+  background: linear-gradient(180deg, rgba(28, 18, 44, 0.85) 0%, rgba(18, 12, 32, 0.85) 100%);
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  box-shadow: 0 4px 20px rgba(22, 10, 36, 0.40);
+}
+.qv-ann-card.theme-modify .qv-ann-id {
+  background: #9333ea;
+  color: #ffffff;
+  border: 1px solid rgba(192, 132, 252, 0.45);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+}
+.qv-ann-card.theme-modify .qv-ann-kind {
+  background: rgba(168, 85, 247, 0.16);
+  border-color: rgba(192, 132, 252, 0.35);
+  color: #c084fc;
+}
+
+/* 3. Theme Drop / Fault / Removed (Crimson-Coral Red #ef4444 / #f87171) */
+.qv-ann-card.theme-drop {
+  background: linear-gradient(180deg, rgba(38, 16, 22, 0.85) 0%, rgba(26, 10, 14, 0.85) 100%);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  box-shadow: 0 4px 20px rgba(32, 8, 12, 0.40);
+}
+.qv-ann-card.theme-drop .qv-ann-id {
+  background: #dc2626;
+  color: #ffffff;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+}
+.qv-ann-card.theme-drop .qv-ann-kind {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+/* Light mode overrides for themes */
+:root[data-theme="light"] .qv-ann-card.theme-keep {
+  background: #f0f7ff;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+:root[data-theme="light"] .qv-ann-card.theme-modify {
+  background: #faf5ff;
+  border-color: rgba(168, 85, 247, 0.25);
+}
+:root[data-theme="light"] .qv-ann-card.theme-drop {
+  background: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
 .qv-ann-card:hover,
 .qv-ann-card.is-ann-active {
-  border-color: var(--amber-fill);
-  background: rgba(38, 35, 58, 0.90);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35), 0 10px 26px rgba(0, 0, 0, 0.32);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45), 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.qv-ann-card.theme-modify:hover,
+.qv-ann-card.theme-modify.is-ann-active {
+  border-color: #c084fc;
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.45), 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.qv-ann-card.theme-drop:hover,
+.qv-ann-card.theme-drop.is-ann-active {
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.45), 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
 :root[data-theme="light"] .qv-ann-card:hover,
 :root[data-theme="light"] .qv-ann-card.is-ann-active {
   background: #ffffff;
-  border-color: var(--amber-fill);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.32), 0 8px 22px rgba(15, 23, 42, 0.08);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.32), 0 8px 22px rgba(15, 23, 42, 0.08);
 }
 
 .qv-ann-card.is-removed {
@@ -5321,13 +5601,109 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
 }
 
 .qv-ann-btn:hover:not(:disabled) {
-  border-color: var(--amber-fill);
-  background: var(--amber-dim);
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.qv-ann-btn.is-modify-action {
+  border-color: rgba(192, 132, 252, 0.35);
+  color: #c084fc;
+}
+
+.qv-ann-btn.is-modify-action:hover:not(:disabled) {
+  border-color: #c084fc;
+  background: rgba(168, 85, 247, 0.22);
+  color: #ffffff;
+}
+
+.qv-ann-btn.is-remove {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+.qv-ann-btn.is-remove:hover:not(:disabled) {
+  border-color: #f87171;
+  background: rgba(239, 68, 68, 0.22);
+  color: #ffffff;
 }
 
 .qv-ann-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.qv-ann-btn.is-confirm {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(37, 99, 235, 0.18);
+  color: #60a5fa;
+}
+
+.qv-ann-btn.is-confirm:hover:not(:disabled) {
+  border-color: #38bdf8;
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.qv-ann-card.is-confirmed {
+  padding: 10px 14px;
+  gap: 0;
+  border-color: var(--keep-border);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+:root[data-theme="light"] .qv-ann-card.is-confirmed {
+  background: rgba(16, 185, 129, 0.07);
+  border-color: rgba(5, 150, 105, 0.28);
+}
+
+.qv-ann-card.is-confirmed:hover,
+.qv-ann-card.is-confirmed.is-ann-active {
+  border-color: var(--keep-color);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+:root[data-theme="light"] .qv-ann-card.is-confirmed:hover,
+:root[data-theme="light"] .qv-ann-card.is-confirmed.is-ann-active {
+  background: #ffffff;
+  border-color: var(--keep-color);
+}
+
+.qv-ann-kind.is-confirmed {
+  background: var(--keep-bg);
+  border-color: var(--keep-border);
+  color: var(--keep-color);
+}
+
+.qv-ann-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.qv-ann-mini-left {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.qv-ann-mini-preview {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qv-ann-expand-btn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 11.5px;
 }
 
 .qv-ann-btn.is-remove:hover:not(:disabled) {
@@ -6446,16 +6822,68 @@ body.sum-centered-page {
   gap: 7px;
   padding: 4px 11px;
   border-radius: 8px;
+  font-family: inherit;
   font-size: 13px;
   line-height: 1.35;
+  text-align: left;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.sum-ann-chip:hover {
+  border-color: var(--amber-fill);
+  background: rgba(245, 158, 11, 0.10);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.sum-ann-chip.is-edited {
+  border-color: var(--amber-border);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-main);
+}
+
+.sum-ann-chip.is-removed {
+  opacity: 0.65;
+  border-style: dashed;
+  text-decoration: line-through;
+}
+
+.sum-chip-tag {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--edit-bg);
+  border: 1px solid var(--edit-border);
+  color: var(--edit-color);
+}
+
+.sum-chip-tag.is-removed {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-color);
+  text-decoration: none;
 }
 
 :root[data-theme="light"] .sum-ann-chip {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.10);
+}
+
+:root[data-theme="light"] .sum-ann-chip:hover {
+  background: #fffbeb;
+  border-color: var(--amber-fill);
+}
+
+:root[data-theme="light"] .sum-ann-chip.is-edited {
+  background: #fffbeb;
+  border-color: rgba(217, 119, 6, 0.35);
 }
 
 .sum-ann-chip code {

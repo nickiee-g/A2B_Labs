@@ -98,8 +98,8 @@ def monthly_fee(balance, deposits, student, age):
         newRange: [9, 9],
         newRefLabel: 'New Line 9',
         pointerText: '← Note 4 · Kept standard $12 monthly fee',
-        whatItDoes: 'Applies the normal $12 monthly checking fee when none of the three waiver rules apply.',
-        summary: 'Keeps the standard $12 monthly fee when none of the three waiver rules apply.'
+        whatItDoes: 'Applies the normal $12 monthly checking fee when none of the waiver rules apply.',
+        summary: 'Keeps the standard $12 monthly fee when none of the waiver rules apply.'
       }
     ]
   },
@@ -202,8 +202,8 @@ def overdraft_fee(checking_bal, savings_bal, opted_in, tx_amount):
         newRange: [10, 10],
         newRefLabel: 'New Line 10',
         pointerText: '← Note 4 · Charges $35 only when unprotected',
-        whatItDoes: 'Charges the standard $35 overdraft fee only when the shortfall exceeds $50 and linked savings cannot cover it.',
-        summary: 'Applies the $35 overdraft fee only after checking both the $50 cushion rule and linked savings protection.'
+        whatItDoes: 'Charges the standard $35 overdraft fee when no cushion or savings protection rule waives it.',
+        summary: 'Applies the $35 overdraft fee only when no active overdraft waiver rule applies.'
       }
     ]
   },
@@ -410,8 +410,8 @@ def effective_apr(base_apr, days_late, autopay):
         newRange: [9, 9],
         newRefLabel: 'New Line 9',
         pointerText: '← Note 4 · Kept standard customer rate',
-        whatItDoes: 'Returns the borrower’s standard base interest rate when not on Autopay and within the 15-day grace period.',
-        summary: 'Keeps the borrower’s standard interest rate when they are not on Autopay and are within the 15-day grace period.'
+        whatItDoes: 'Returns the borrower’s standard base interest rate when no penalty or Autopay adjustment applies.',
+        summary: 'Keeps the borrower’s standard interest rate when no late-penalty or Autopay rule changes it.'
       }
     ]
   }
