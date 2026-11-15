@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="description" content="Learn how A2B Labs modernizes legacy banking code: How It Works, Features, Banking Cases, and Privacy."/>
+  <meta name="description" content="Learn how A2B Labs supports plain-English interaction and code modernization: How It Works, Features, Examples, and Privacy."/>
   <title>About — A2B Labs</title>
-  <script src="theme.js?v=angstrom-31"></script>
+  <script src="theme.js?v=angstrom-37"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="code-colors.css?v=angstrom-31"/>
-  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-31"/>
-  <link rel="stylesheet" href="vs-breadcrumb-trail.css?v=angstrom-31"/>
-  <link rel="stylesheet" href="angstrom.css?v=angstrom-31"/>
+  <link rel="stylesheet" href="code-colors.css?v=angstrom-37"/>
+  <link rel="stylesheet" href="vs-dropzone.css?v=angstrom-37"/>
+  <link rel="stylesheet" href="vs-breadcrumb-trail.css?v=angstrom-37"/>
+  <link rel="stylesheet" href="angstrom.css?v=angstrom-37"/>
 </head>
 <body class="home-bench-page">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -50,7 +50,7 @@
             <ul>
               <li><a href="#how-it-works">How It Works</a></li>
               <li><a href="#features">Features</a></li>
-              <li><a href="#banking-cases">Banking Cases</a></li>
+              <li><a href="#examples">Examples</a></li>
               <li><a href="#privacy">Privacy</a></li>
             </ul>
           </li>
@@ -77,15 +77,15 @@
           <span class="ang-eyebrow-bar"></span>
           <span>About A2B Labs</span>
         </div>
-        <h1 class="ang-hero-h1 home-h1-compact">Plain-English Banking Modernization</h1>
+        <h1 class="ang-hero-h1 home-h1-compact">Plain English Interaction and Modernization</h1>
         <p class="ang-hero-lead home-lead-compact">
-          See how our simple review process works, the controls that keep your team in charge, real banking examples, and how your files stay private.
+          See how our simple review process works, the controls that keep your team in charge, ready-to-try examples, and how your files stay private.
         </p>
 
         <div class="about-tabs" role="tablist" aria-label="About sections">
           <button class="about-tab is-active" type="button" role="tab" aria-selected="true" data-about-tab="how-it-works">How It Works</button>
           <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="features">Features</button>
-          <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="banking-cases">Banking Cases</button>
+          <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="examples">Examples</button>
           <button class="about-tab" type="button" role="tab" aria-selected="false" data-about-tab="privacy">Privacy</button>
         </div>
 
@@ -93,7 +93,7 @@
           <div class="about-grid">
             <article class="about-card">
               <h3>01 · Add Your Files on Home</h3>
-              <p>Drop in older banking files, pick a ready-to-try sample, or type in everyday English what rule you want checked.</p>
+              <p>Drop in older files, pick a ready-to-try sample, or type in everyday English what rule you want checked.</p>
             </article>
             <article class="about-card">
               <h3>02 · Compare Old vs. Updated Code</h3>
@@ -114,7 +114,7 @@
           <div class="about-grid">
             <article class="about-card">
               <h3>Finds Hidden Rule Mistakes</h3>
-              <p>Spots policy errors buried inside older banking files — like student fee waivers that were accidentally skipped or overdraft fees charged too early.</p>
+              <p>Spots rule errors buried inside older files — like conditions that were accidentally skipped, nested in the wrong order, or rounded inaccurately.</p>
             </article>
             <article class="about-card">
               <h3>Your Team Stays in Control</h3>
@@ -131,7 +131,7 @@
           </div>
         </section>
 
-        <section class="about-panel" id="banking-cases" data-about-panel="banking-cases" hidden>
+        <section class="about-panel" id="examples" data-about-panel="examples" hidden>
           <div class="about-grid">
             <article class="about-card">
               <h3>fee_waiver.cbl · Monthly Fee Waiver</h3>
@@ -164,7 +164,7 @@
             </article>
             <article class="about-card">
               <h3>Safe Offline Preview</h3>
-              <p>Reviews and sample checks run safely in an isolated workspace — never connecting to live customer accounts or bank databases.</p>
+              <p>Reviews and sample checks run safely in an isolated workspace — never connecting to live accounts or external databases.</p>
             </article>
           </div>
         </section>
@@ -180,10 +180,11 @@
       const LABELS = {
         'how-it-works': 'How It Works',
         'features': 'Features',
-        'banking-cases': 'Banking Cases',
+        'examples': 'Examples',
         'privacy': 'Privacy'
       };
       function activate(id) {
+        if (id === 'banking-cases') id = 'examples';
         if (!LABELS[id]) id = 'how-it-works';
         tabs.forEach(t => {
           const on = t.dataset.aboutTab === id;
@@ -204,8 +205,8 @@
       if (location.hash) activate(location.hash.replace('#', ''));
     })();
   </script>
-  <script src="vs-breadcrumb-trail.js?v=angstrom-31"></script>
+  <script src="vs-breadcrumb-trail.js?v=angstrom-37"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
-  <script src="macro-bench.js?v=angstrom-31"></script>
+  <script src="macro-bench.js?v=angstrom-37"></script>
 </body>
 </html>

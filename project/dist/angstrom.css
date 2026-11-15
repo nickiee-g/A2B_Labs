@@ -60,21 +60,21 @@
 }
 
 :root[data-theme="light"] {
-  --bg-lowest: #f5f5f7;
-  --bg-surface: #ffffff;
+  --bg-lowest: #e2e8f0;
+  --bg-surface: rgba(255, 255, 255, 0.88);
   --bg-low: #f1f5f9;
   --bg-mid: #e2e8f0;
   --bg-high: #dbe2ec;
   --bg-highest: #cbd5e1;
   --bg-bright: #e8eef6;
-  --header-bg: rgba(255, 255, 255, 0.84);
+  --header-bg: rgba(248, 250, 252, 0.82);
 
   --text-main: #0f172a;
   --text-tertiary: #1e293b;
   --text-muted: #475569;
   --text-outline: #64748b;
-  --border-subtle: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(15, 23, 42, 0.20);
+  --border-subtle: rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.22);
   --grid-line: rgba(15, 23, 42, 0.035);
   --radial-glow: rgba(245, 158, 11, 0.07);
 
@@ -5513,8 +5513,9 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
    CONDENSED HOMEPAGE CHAT COMPOSER + BAR PRESETS DROPDOWN (390px+ READY)
    ========================================================================== */
 .home-composer-frame {
-  justify-content: flex-start;
-  padding-top: clamp(74px, 14.5vh, 144px);
+  justify-content: center;
+  padding-top: 24px;
+  padding-bottom: 24px;
 }
 
 .home-composer-shell {
@@ -5580,31 +5581,39 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
 }
 
 .home-drop-icon-btn svg {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   display: block;
 }
 
 .home-drop-icon-label {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.01em;
   line-height: 1.2;
 }
 
 :root[data-theme="light"] .home-drop-icon-btn {
-  color: rgba(217, 119, 6, 0.75);
+  color: #d97706;
 }
 
 :root[data-theme="light"] .home-drop-icon-btn:hover {
   color: #b45309;
-  background: rgba(217, 119, 6, 0.08);
+  background: rgba(217, 119, 6, 0.10);
+}
+
+:root[data-theme="light"] .home-composer-slot .vs-chat-input {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.12), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 .home-composer-slot .vs-chat-input-text {
-  min-height: 112px;
-  padding-top: 16px;
+  min-height: 220px;
+  padding-top: 18px;
 }
 
 /* ==========================================================================
@@ -5648,9 +5657,9 @@ body {
 
 .app-parallax-plate {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
   object-fit: cover;
   object-position: center;
   will-change: translate, scale;
@@ -5706,8 +5715,28 @@ body {
   inset: 0;
   z-index: 5;
   opacity: 0;
-  background: rgba(241, 245, 249, 0.78);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.28) 0%, rgba(241, 245, 249, 0.22) 55%, rgba(226, 232, 240, 0.34) 100%);
   transition: opacity 0.2s ease;
+}
+
+:root[data-theme="light"] body {
+  background-color: #e2e8f0;
+}
+
+:root[data-theme="light"] .app-parallax-bg {
+  background: #e2e8f0;
+}
+
+:root[data-theme="light"] .app-parallax-plate {
+  filter: brightness(1.42) contrast(0.95) saturate(0.85);
+}
+
+:root[data-theme="light"] .app-parallax-scrim {
+  background: radial-gradient(78% 74% at 48% 48%, rgba(248, 250, 252, 0.22) 0%, rgba(226, 232, 240, 0.42) 100%);
+}
+
+:root[data-theme="light"] .app-parallax-vignette {
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(148, 163, 184, 0.36) 100%);
 }
 
 :root[data-theme="light"] .app-parallax-light-veil {
@@ -5994,7 +6023,10 @@ body {
     font-size: 11.5px;
   }
   .home-composer-frame {
-    padding: 48px 12px 24px;
+    padding: 24px 12px;
+  }
+  .home-composer-slot .vs-chat-input-text {
+    min-height: 180px;
   }
   .home-bar-presets-btn,
   .home-composer-slot .vs-chat-input-model-btn {

@@ -37,7 +37,7 @@ let aiBugCounter = 1;
 let queuePage = 1;
 let queuePageSize = 5;
 
-const QUEUE_STORAGE_KEY = 'a2b-banking-queue-v4';
+const QUEUE_STORAGE_KEY = 'a2b-file-queue-v5';
 const stepCollapsed = { 1: false, 2: false };
 let annotations = [];
 let hoveredAnnId = '';
@@ -60,13 +60,13 @@ function formatChangeLabel(id) {
 
 function describeWhatSectionDoes(ch, presetTitle) {
   if (ch.kind === 'guard') {
-    return 'Checks customer details (balances, amounts, or ages) before doing any math.';
+    return 'Checks input values before running any calculations.';
   }
   if (ch.kind === 'fix') {
-    return `Runs the main banking rule in ${presetTitle || 'this file'} to decide the right customer outcome.`;
+    return `Runs the main rule in ${presetTitle || 'this file'} to decide the right outcome.`;
   }
   if (ch.id === 'CHG-04') {
-    return 'Applies the normal fee or default rule when no special discount applies.';
+    return 'Applies the standard default rule when no special condition applies.';
   }
   return 'Checks each rule in a clear, step-by-step order.';
 }
@@ -85,8 +85,8 @@ function buildPresetAnnotations(d) {
       newRange: [...nr],
       newRefLabel: ch.newRefLabel || 'New Line 1',
       whatItDoes: ch.whatItDoes || describeWhatSectionDoes(ch, d.title),
-      reason: ch.summary || 'Updated to match current banking rules.',
-      originalReason: ch.summary || 'Updated to match current banking rules.',
+      reason: ch.summary || 'Updated to match current rules.',
+      originalReason: ch.summary || 'Updated to match current rules.',
       status: 'active',
       editing: false
     };
@@ -96,10 +96,10 @@ function buildPresetAnnotations(d) {
 function buildCustomAutoFix(item) {
   const srcLines = String(item.source || '').split('\n');
   const totalOld = Math.max(1, srcLines.length);
-  const baseName = String(item.name || 'banking_script')
+  const baseName = String(item.name || 'legacy_script')
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-zA-Z0-9_]/g, '_')
-    .toLowerCase() || 'process_account';
+    .toLowerCase() || 'process_record';
 
   // Detect real patterns in uploaded source to produce disjoint, 1-to-1 line mappings
   let conditionLineIdx = srcLines.findIndex(l => /\b(if|when|evaluate|case|where)\b/i.test(l));
@@ -119,10 +119,10 @@ function buildCustomAutoFix(item) {
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join('') || 'BankingRuleService';
+    .join('') || 'ModernizedRuleService';
 
   const suggestedLines = isJavaTarget ? [
-    `// Updated ${item.target || 'Java 21'} banking service from ${item.name}`,
+    `// Updated ${item.target || 'Java 21'} service from ${item.name}`,
     `import java.math.BigDecimal;`,
     `import java.math.RoundingMode;`,
     ``,
@@ -130,26 +130,26 @@ function buildCustomAutoFix(item) {
     `    public static BigDecimal evaluate(BigDecimal amount, BigDecimal balance, boolean isEligible) {`,
     `        // Note 1: Added safety check for negative or missing inputs`,
     `        if (amount == null || balance == null || amount.signum() < 0 || balance.signum() < 0) {`,
-    `            throw new IllegalArgumentException("Invalid negative or missing banking input");`,
+    `            throw new IllegalArgumentException("Invalid negative or missing input");`,
     `        }`,
-    `        // Note 2: Exact penny rounding & clear rule check`,
+    `        // Note 2: Exact decimal rounding & clear rule check`,
     `        BigDecimal cleanAmount = amount.setScale(2, RoundingMode.HALF_UP);`,
     `        BigDecimal cleanBalance = balance.setScale(2, RoundingMode.HALF_UP);`,
     `        if (isEligible || cleanBalance.compareTo(new BigDecimal("1500.00")) >= 0) {`,
     `            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);`,
     `        }`,
-    `        // Note 3: Clear final dollar result`,
+    `        // Note 3: Clear final result`,
     `        return cleanAmount;`,
     `    }`,
     `}`
   ] : [
-    `# Updated ${item.target || 'Python'} banking module from ${item.name}`,
+    `# Updated ${item.target || 'Python'} module from ${item.name}`,
     `from decimal import Decimal, ROUND_HALF_UP`,
     ``,
     `def ${baseName}(amount, balance=0, is_eligible=False):`,
     `    # Note 1: Added safety check for negative or missing inputs`,
     `    if amount is None or balance is None or float(amount) < 0 or float(balance) < 0:`,
-    `        raise ValueError("Invalid negative or missing banking input")`,
+    `        raise ValueError("Invalid negative or missing input")`,
     ``,
     `    # Note 2: Exact penny rounding & clear rule check`,
     `    clean_amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`,
@@ -218,8 +218,8 @@ function buildCustomAutoFix(item) {
   return {
     code: suggestedLines.join('\n'),
     annotations: anns,
-    summary: `Uploaded ${item.language || 'banking'} module (${totalOld} lines) automatically scanned and repaired.`,
-    issue: 'Auto-fixed missing negative-input guards and exact cent-level currency precision.'
+    summary: `Uploaded ${item.language || 'legacy'} module (${totalOld} lines) automatically scanned and repaired.`,
+    issue: 'Auto-fixed missing negative-input guards and exact decimal precision.'
   };
 }
 
@@ -240,8 +240,8 @@ function autoFixQueueItem(item) {
     }));
     item.result = {
       code: d.code,
-      explanation: 'Automatically fixed banking rule errors and added safety checks when uploaded.',
-      assumptions: ['Amounts use US dollars; negative numbers are stopped with a clear error message.'],
+      explanation: 'Automatically fixed rule errors and added safety checks when uploaded.',
+      assumptions: ['Negative numbers are stopped upfront with a clear error message.'],
       suggested_tests: []
     };
     if (!Array.isArray(item.annotations) || !item.annotations.length) {
@@ -276,8 +276,8 @@ function autoFixQueueItem(item) {
     }));
     item.result = {
       code: fixed.code,
-      explanation: 'Automatically added safety checks, exact penny rounding, and clearer steps when uploaded.',
-      assumptions: ['Rounds money to the nearest cent using standard banking rules.'],
+      explanation: 'Automatically added safety checks, exact decimal rounding, and clearer steps when uploaded.',
+      assumptions: ['Rounds decimal values consistently using standard half-up rounding.'],
       suggested_tests: []
     };
     if (!Array.isArray(item.annotations) || !item.annotations.length) {
@@ -357,8 +357,8 @@ function ensureQueueItemChecks(item) {
   const usesPresetSource = item.isBuiltIn || (d && String(item.source || '').trim() === String(d.legacy || '').trim());
   if (usesPresetSource && d && Array.isArray(d.cases)) {
     item.checksRun = {
-      label: `${d.cases.length} of ${d.cases.length} banking tests passed`,
-      note: `Verified ${item.name} against real-world banking scenarios.`,
+      label: `${d.cases.length} of ${d.cases.length} tests passed`,
+      note: `Verified ${item.name} against realistic test scenarios.`,
       rows: d.cases.map(c => ({
         name: c.name,
         old: c.old || 'Buggy',
@@ -535,7 +535,7 @@ function removeQueueFile(fileId) {
   }
   const totalPages = Math.max(1, Math.ceil(fileQueue.length / queuePageSize));
   if (queuePage > totalPages) queuePage = totalPages;
-  notice = `Removed "${removed.name}" from the banking queue.`;
+  notice = `Removed "${removed.name}" from the file queue.`;
   saveQueueToStorage();
   render();
 }
@@ -555,7 +555,7 @@ function clearAllQueueEntries() {
     persistentDropzoneEl.clear();
   }
   error = '';
-  notice = 'Cleared all entries. Drop banking code files above or click "Generate Code" to begin.';
+  notice = 'Cleared all entries. Drop code files above or pick an example to begin.';
   saveQueueToStorage();
   render();
 }
@@ -629,7 +629,7 @@ async function addFilesToQueueFromDropzone(files) {
 
   for (const file of list) {
     if (file.size > 85000) {
-      error = `"${file.name}" is larger than 85 KB. Please drop smaller banking code blocks.`;
+      error = `"${file.name}" is larger than 85 KB. Please drop smaller code files.`;
       continue;
     }
     try {
@@ -642,9 +642,9 @@ async function addFilesToQueueFromDropzone(files) {
         name: file.name,
         isBuiltIn: false,
         presetKey: 'fee_waiver',
-        title: `Uploaded Banking Script (${file.name})`,
+        title: `Uploaded Script (${file.name})`,
         bugBadge: 'Auto-scanned & repaired upon upload',
-        description: `Uploaded banking file (${file.name}). Errors and safety checks were automatically repaired.`,
+        description: `Uploaded file (${file.name}). Errors and safety checks were automatically repaired.`,
         language: detected ? detected.lang : language,
         target: detected ? detected.target : target,
         source: text,
@@ -695,7 +695,7 @@ function selectBankingPreset(presetKey) {
   }
   applyQueueItemToGlobals(existing);
   error = '';
-  notice = `Loaded faulty banking scenario: "${existing.title}" (${existing.name}).`;
+  notice = `Loaded sample scenario: "${existing.title}" (${existing.name}).`;
   saveQueueToStorage();
   render();
 }
@@ -724,13 +724,13 @@ async function generateFaultyBankingCodeWithAI() {
       const data = await r.json();
       if (r.ok && data && data.source && data.policy) {
         const id = 'ai-bug-' + Date.now();
-        const fileName = (data.fileName || `ai_bank_bug_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
+        const fileName = (data.fileName || `ai_sample_bug_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
         const newItem = autoFixQueueItem({
           id,
           name: fileName,
           isBuiltIn: false,
           presetKey: nextPresetKey,
-          title: data.title || `AI Faulty Banking Case #${aiBugCounter}`,
+          title: data.title || `AI Faulty Sample Case #${aiBugCounter}`,
           bugBadge: data.bugBadge || `AI-Planted Bug: ${data.issue || basePreset.bugBadge}`,
           description: data.description || basePreset.description,
           language: 'COBOL',
@@ -895,8 +895,8 @@ function loadCodeFixtureForActive() {
   }
   result = {
     code: d.code,
-    explanation: 'Created clean, readable Python banking code from your approved rules and mapped every change back to the original COBOL lines.',
-    assumptions: ['Amounts are evaluated in US dollars; invalid negative inputs raise a clear ValueError.'],
+    explanation: 'Created clean, readable Python code from your approved rules and mapped every change back to the original COBOL lines.',
+    assumptions: ['Invalid negative inputs raise a clear ValueError.'],
     suggested_tests: []
   };
   checksRun = null;
@@ -905,8 +905,8 @@ function loadCodeFixtureForActive() {
 function runPresetChecksNow() {
   const d = currentPreset();
   checksRun = {
-    label: `${d.cases.length} of ${d.cases.length} banking tests passed`,
-    note: 'Tested in an isolated banking sandbox against real-world customer scenarios.',
+    label: `${d.cases.length} of ${d.cases.length} tests passed`,
+    note: 'Tested in an isolated sandbox against realistic scenarios.',
     rows: d.cases.map(c => ({
       name: c.name,
       old: c.old || 'Failed',
@@ -920,7 +920,7 @@ function runPresetChecksNow() {
 function resetAll() {
   initDefaultQueue();
   busy = '';
-  notice = 'Reset to the default Banking Fee Waiver scenario.';
+  notice = 'Reset to the default Monthly Fee Waiver sample scenario.';
   error = '';
   saveQueueToStorage();
   render();
@@ -1239,7 +1239,7 @@ function renderReportStatsHtml() {
     <div class="report-bars-panel">
       <div class="report-bars-head">
         <strong>Estimated Time Comparison Across Queue (${m.fileCount} file${m.fileCount === 1 ? '' : 's'})</strong>
-        <span>Based on ${m.sloc} lines of banking logic${m.modules > 1 ? ` &times; ${m.modules} batch multiplier` : ''}</span>
+        <span>Based on ${m.sloc} lines of code${m.modules > 1 ? ` &times; ${m.modules} batch multiplier` : ''}</span>
       </div>
 
       <div class="effort-row">
@@ -1249,14 +1249,14 @@ function renderReportStatsHtml() {
         </div>
         <div class="effort-track">
           <div class="effort-fill" style="width:${m.baselineHrs > 0 ? 100 : 0}%">
-            <span class="seg seg-1" style="width:40%" title="Reading old COBOL: ${manualDiscovery}h"></span>
-            <span class="seg seg-2" style="width:30%" title="Checking banking policy: ${manualPolicy}h"></span>
+            <span class="seg seg-1" style="width:40%" title="Reading old code: ${manualDiscovery}h"></span>
+            <span class="seg seg-2" style="width:30%" title="Checking rules: ${manualPolicy}h"></span>
             <span class="seg seg-3" style="width:30%" title="Writing & testing new code: ${manualRewrite}h"></span>
           </div>
         </div>
         <div class="effort-legend">
           <span><i></i>Reading old code (${manualDiscovery}h)</span>
-          <span><i></i>Checking bank policy (${manualPolicy}h)</span>
+          <span><i></i>Checking rules (${manualPolicy}h)</span>
           <span><i></i>Writing &amp; testing new code (${manualRewrite}h)</span>
         </div>
       </div>
@@ -1341,7 +1341,7 @@ function renderAnnotatedSideBySideHtml(includeTable = false) {
         <div class="change-callout-head">
           <strong>How to read this comparison:</strong>
         </div>
-        <p>Each badge in the <strong>Updated Code</strong> (<span class="change-pointer-pill">&larr; CHG-01..04</span>) points directly back to the exact lines it replaced or fixed in the <strong>Original Banking Code</strong>. Click any Change ID above or any highlighted line below to inspect it.</p>
+        <p>Each badge in the <strong>Updated Code</strong> (<span class="change-pointer-pill">&larr; CHG-01..04</span>) points directly back to the exact lines it replaced or fixed in the <strong>Original Code</strong>. Click any Change ID above or any highlighted line below to inspect it.</p>
       </div>
     `}
 
@@ -1349,7 +1349,7 @@ function renderAnnotatedSideBySideHtml(includeTable = false) {
       <div class="annotated-pane">
         <div class="ide-header">
           <div class="ide-title-group">
-            <span class="ide-title">Original Banking Code</span>
+            <span class="ide-title">Original Code</span>
             <span class="ide-badge">${esc(language)}</span>
           </div>
           <div class="ide-meta">
@@ -1470,7 +1470,7 @@ function updateRailTelemetry() {
 
   const summarySub = document.getElementById('sidebar-summary-sub');
   if (summarySub) {
-    summarySub.textContent = reportUnlocked ? 'Verified · Savings unlocked' : (result ? 'Ready · Run banking tests' : 'Run tests & see ROI');
+    summarySub.textContent = reportUnlocked ? 'Verified · Savings unlocked' : (result ? 'Ready · Run tests' : 'Run tests & see ROI');
   }
 
   const topbarSummaryBtn = document.getElementById('topbar-summary-btn');
@@ -1651,11 +1651,11 @@ async function handleComposerSubmit(detail, api) {
           name: fEntry.name,
           isBuiltIn: Boolean(matchedPreset && !/java/i.test(itemTarget)),
           presetKey: matchedPreset ? matchedPreset.id : 'fee_waiver',
-          title: matchedPreset ? matchedPreset.title : `Uploaded Banking Script (${fEntry.name})`,
+          title: matchedPreset ? matchedPreset.title : `Uploaded Script (${fEntry.name})`,
           bugBadge: matchedPreset ? matchedPreset.bugBadge : 'Auto-scanned & repaired upon upload',
           description: matchedPreset
             ? matchedPreset.description
-            : `Uploaded banking file (${fEntry.name}). Errors and safety checks were automatically repaired.`,
+            : `Uploaded file (${fEntry.name}). Errors and safety checks were automatically repaired.`,
           language: itemLang,
           target: itemTarget,
           source: content,
@@ -1680,14 +1680,14 @@ async function handleComposerSubmit(detail, api) {
     const isSql = /\b(SELECT|CREATE|BEGIN|DECLARE|PLS_INTEGER|NUMBER)\b/i.test(rawText);
     const ext = isSql ? 'sql' : 'cbl';
     const num = aiBugCounter++;
-    const snippetName = `pasted_banking_${num}.${ext}`;
+    const snippetName = `pasted_snippet_${num}.${ext}`;
     const id = 'paste-' + Date.now();
     const newItem = autoFixQueueItem({
       id,
       name: snippetName,
       isBuiltIn: false,
       presetKey: 'fee_waiver',
-      title: `Pasted Banking Snippet #${num}`,
+      title: `Pasted Code Snippet #${num}`,
       bugBadge: 'Auto-scanned & repaired from Chat Composer',
       description: 'Pasted directly into the Homepage Chat Composer and repaired automatically.',
       language: isSql ? 'Oracle PL/SQL' : mode.lang,
@@ -1723,7 +1723,7 @@ async function handleComposerSubmit(detail, api) {
         const data = await r.json();
         if (!canceled && r.ok && data && data.source) {
           const id = 'ai-bug-' + Date.now();
-          const fileName = (data.fileName || `ai_banking_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
+          const fileName = (data.fileName || `ai_generated_${aiBugCounter++}.cbl`).replace(/[^a-zA-Z0-9._-]/g, '_');
           const aiItem = autoFixQueueItem({
             id,
             name: fileName,
@@ -1977,7 +1977,7 @@ function generateDistinctBankingFile(api) {
     picked = {
       fileName: nextName,
       title: `${base.title} (Variant ${ver})`,
-      prompt: `Check and fix banking rule errors in ${nextName} (${base.title})`,
+      prompt: `Check and fix rule errors in ${nextName} (${base.title})`,
       code: `${base.code}\n${ext === '.sql' ? `-- Generated variant #${ver}` : `      * Generated variant #${ver}`}`
     };
   }
@@ -1998,9 +1998,9 @@ function ensurePersistentChatComposer() {
     <form
       class="vs-chat-input"
       id="home-vs-chat-input"
-      aria-label="Banking code modernization composer"
+      aria-label="Code modernization composer"
       data-max-files="10"
-      data-drop-label="Drop banking files here"
+      data-drop-label="Drop files here"
       data-accept=".cbl,.cob,.cpy,.sql,.pls,.pkb,.rpg,.rpgle,.py,.java,.cs,.js,.ts,.go,.c,.cpp,.txt,.md,.json,.csv,.pdf"${darkAttr}
     >
       <div class="home-composer-stage">
@@ -2009,7 +2009,7 @@ function ensurePersistentChatComposer() {
           rows="4"
           name="message"
           placeholder=""
-          aria-label="Banking rules or files to update"
+          aria-label="Rules or files to update"
         ></textarea>
         <button type="button" class="home-drop-icon-btn" aria-label="Upload files">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2020,13 +2020,13 @@ function ensurePersistentChatComposer() {
         </button>
       </div>
       <div class="vs-chat-input-bar">
-        <button class="vs-chat-input-attach" type="button" aria-label="Upload banking files"></button>
+        <button class="vs-chat-input-attach" type="button" aria-label="Upload files"></button>
         <div class="home-bar-presets" id="home-bar-presets">
           <button class="home-bar-presets-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
             <span class="home-bar-presets-label">+ Examples</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </button>
-          <ul class="home-bar-presets-menu" role="listbox" aria-label="Sample banking files and generator" hidden>
+          <ul class="home-bar-presets-menu" role="listbox" aria-label="Sample files and generator" hidden>
             <li class="home-bar-presets-heading" role="presentation">Try a Sample File</li>
             <li role="option" tabindex="-1" data-preset-action="sample:fee_waiver">
               <span>Fee Waiver<span class="preset-ext">.cbl</span></span>
@@ -2219,26 +2219,15 @@ function attachSampleScenarioToComposer(presetKey) {
     api.addFiles([sampleFile]);
   }
   if (!String(api.value || '').trim()) {
-    api.value = `Check and fix banking rule errors in ${p.fileName} (${p.title})`;
+    api.value = `Check and fix rule errors in ${p.fileName} (${p.title})`;
   }
   api.focus();
 }
 
 function buildHomeDockHtml() {
-  const totalFiles = fileQueue.length;
-
   return `
     ${error ? `<div class="banner error" role="alert" style="width:100%"><span>${esc(error)}</span><button type="button" class="banner-dismiss" data-dismiss="error" aria-label="Dismiss">&times;</button></div>` : ''}
     ${notice ? `<div class="banner" role="status" style="width:100%"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
-
-    ${totalFiles > 0 ? `
-      <div class="home-queue-status-bar" role="region" aria-label="Files ready for review">
-        <span class="home-queue-status-dot" aria-hidden="true"></span>
-        <span><strong>${totalFiles}</strong> file${totalFiles === 1 ? '' : 's'} ready</span>
-        <a class="home-open-ws-pill" href="/workspace.html">Open Workspace &rarr;</a>
-        <button type="button" id="clear-all-entries-btn" class="home-clear-queue-btn" title="Remove all files from list">Clear</button>
-      </div>
-    ` : ''}
   `;
 }
 
@@ -2287,7 +2276,7 @@ function renderWorkspacePage() {
       ${notice ? `<div class="banner" role="status"><span>${esc(notice)}</span><button type="button" class="banner-dismiss" data-dismiss="notice" aria-label="Dismiss">&times;</button></div>` : ''}
       <section class="step" style="text-align:center;padding:2.5rem 1.5rem">
         <h2 style="margin:0 0 0.5rem;font-family:var(--font-display)">No files added yet</h2>
-        <p style="margin:0 0 1.25rem;color:var(--text-muted)">Add a banking file or try an example on the Home page to compare the old and updated versions side by side.</p>
+        <p style="margin:0 0 1.25rem;color:var(--text-muted)">Add a file or try an example on the Home page to compare the old and updated versions side by side.</p>
         <div class="actions" style="justify-content:center">
           <a class="primary" href="/">Go to Home &amp; Add Files &rarr;</a>
           <button type="button" id="ws-load-sample-btn" class="btn-secondary">Try a Sample File</button>
@@ -2619,11 +2608,11 @@ function describeFileChangelog(item) {
   } else if (GENERATED_CHANGELOG_DESCRIPTIONS[stem]) {
     base = GENERATED_CHANGELOG_DESCRIPTIONS[stem];
   } else {
-    const srcLang = item.language || 'old banking';
+    const srcLang = item.language || 'legacy';
     base = {
-      did: `Ran ${srcLang} banking rules across ${String(item.source || '').split('\n').length} lines without upfront safety checks or penny rounding.`,
+      did: `Ran ${srcLang} rules across ${String(item.source || '').split('\n').length} lines without upfront safety checks or consistent rounding.`,
       now: `Updated into clear ${targetLang} steps with ${activeAnns.length} active fix${activeAnns.length === 1 ? '' : 'es'} and a single clear result.`,
-      improved: 'Keeps your core banking rules working the same while adding safety checks, exact penny math, and plain-English notes.'
+      improved: 'Keeps your core rules working the same while adding safety checks, accurate math, and plain-English notes.'
     };
   }
 
@@ -2802,7 +2791,7 @@ function exportApprovedQueueAsZip() {
   const changelogSections = [
     '# A2B Labs — Plain-English Feature Changelog',
     '',
-    `Exported ${approvedItems.length} approved banking module${approvedItems.length === 1 ? '' : 's'} with changes applied.`,
+    `Exported ${approvedItems.length} approved module${approvedItems.length === 1 ? '' : 's'} with changes applied.`,
     ''
   ];
 
@@ -2986,7 +2975,7 @@ function renderSummaryPage() {
               <h2 id="sum-overview-title">Summary Overview</h2>
               <span class="sum-eyebrow is-blue">Time &amp; Cost Savings</span>
             </div>
-            <p>Estimated hours saved, money saved, and why your updated banking files are safer and easier to trust.</p>
+            <p>Estimated hours saved, money saved, and why your updated files are safer and easier to trust.</p>
           </div>
 
           <div class="sum-head-actions">
@@ -3540,7 +3529,7 @@ function downloadGeneratedCode() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const activeItem = fileQueue.find(f => f.id === activeFileId);
-  const baseName = activeItem ? activeItem.name.replace(/\.[^.]+$/, '') : 'banking_module';
+  const baseName = activeItem ? activeItem.name.replace(/\.[^.]+$/, '') : 'modernized_module';
   const ext = activeItem && /java/i.test(String(activeItem.target || '')) ? 'java' : 'py';
   a.download = `${baseName}_updated.${ext}`;
   a.click();
@@ -3578,107 +3567,4 @@ if (!loadQueueFromStorage()) {
 const resetBtn = document.getElementById('reset');
 if (resetBtn) resetBtn.onclick = resetAll;
 
-function initAppParallaxBackground() {
-  if (document.querySelector('.app-parallax-bg')) return;
-
-  const bg = document.createElement('div');
-  bg.className = 'app-parallax-bg';
-  bg.setAttribute('aria-hidden', 'true');
-  bg.innerHTML = `
-    <img
-      class="app-parallax-plate app-parallax-far"
-      src="https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-sky.webp"
-      alt=""
-      decoding="async"
-    />
-    <div class="app-parallax-scrim"></div>
-    <img
-      class="app-parallax-plate app-parallax-near"
-      src="https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-fg.webp"
-      alt=""
-      decoding="async"
-    />
-    <div class="app-parallax-grain"></div>
-    <div class="app-parallax-vignette"></div>
-    <div class="app-parallax-light-veil"></div>
-  `;
-  document.body.prepend(bg);
-
-  const farEl = bg.querySelector('.app-parallax-far');
-  const nearEl = bg.querySelector('.app-parallax-near');
-  const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-  const isMotionPaused = () => {
-    let storedPaused = false;
-    try { storedPaused = localStorage.getItem('a2b-motion') === 'paused'; } catch (_e) {}
-    return reduceMotionQuery.matches || storedPaused;
-  };
-
-  let targetPx = 0;
-  let targetPy = 0;
-  let curPx = 0;
-  let curPy = 0;
-  let rafId = 0;
-
-  const applyFrame = () => {
-    rafId = 0;
-    const paused = isMotionPaused();
-    bg.classList.toggle('is-motion-paused', paused);
-
-    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-    const p = maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0;
-
-    if (paused) {
-      farEl.style.translate = '0px 0px';
-      farEl.style.scale = '1.10';
-      nearEl.style.translate = '0px 0px';
-      nearEl.style.scale = '1.08';
-      return;
-    }
-
-    curPx += (targetPx - curPx) * 0.08;
-    curPy += (targetPy - curPy) * 0.08;
-
-    const farX = (curPx * -10).toFixed(2);
-    const farY = (p * -60 + curPy * -4).toFixed(2);
-    const farScale = (1.10 - p * 0.04).toFixed(4);
-
-    const nearX = (curPx * 22).toFixed(2);
-    const nearY = (p * 120 + curPy * 8).toFixed(2);
-    const nearScale = (1.08 + p * 0.06).toFixed(4);
-
-    farEl.style.translate = `${farX}px ${farY}px`;
-    farEl.style.scale = farScale;
-    nearEl.style.translate = `${nearX}px ${nearY}px`;
-    nearEl.style.scale = nearScale;
-
-    if (Math.abs(targetPx - curPx) > 0.002 || Math.abs(targetPy - curPy) > 0.002) {
-      rafId = requestAnimationFrame(applyFrame);
-    }
-  };
-
-  const scheduleFrame = () => {
-    if (!rafId) rafId = requestAnimationFrame(applyFrame);
-  };
-
-  window.addEventListener('pointermove', (e) => {
-    if (isMotionPaused()) return;
-    targetPx = (e.clientX / Math.max(1, window.innerWidth) - 0.5) * 2;
-    targetPy = (e.clientY / Math.max(1, window.innerHeight) - 0.5) * 2;
-    scheduleFrame();
-  }, { passive: true });
-
-  window.addEventListener('scroll', scheduleFrame, { passive: true });
-  window.addEventListener('resize', scheduleFrame, { passive: true });
-  if (reduceMotionQuery.addEventListener) {
-    reduceMotionQuery.addEventListener('change', scheduleFrame);
-  }
-  document.querySelectorAll('[data-motion-toggle]').forEach((btn) => {
-    btn.addEventListener('click', () => requestAnimationFrame(scheduleFrame));
-  });
-
-  applyFrame();
-}
-
-initAppParallaxBackground();
 checkStatus().then(render);

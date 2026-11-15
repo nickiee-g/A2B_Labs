@@ -2,7 +2,7 @@ window.bankingPresets = {
   fee_waiver: {
     id: 'fee_waiver',
     fileName: 'fee_waiver.cbl',
-    label: 'Retail Banking · Monthly Maintenance Fee',
+    label: 'Sample · Monthly Maintenance Fee',
     title: 'Monthly Fee Waiver Bug',
     bugBadge: 'Planted Bug: Student under-25 check trapped inside $500 deposit IF-block',
     description: 'A monthly checking fee script accidentally hides the student fee waiver inside the direct-deposit requirement.',
@@ -32,7 +32,7 @@ window.bankingPresets = {
       'Waive the fee ($0) for any student under 25, even without $500 in direct deposits.',
       'Reject negative dollar amounts and invalid ages.'
     ],
-    issue: 'The old COBOL code checks student status inside the $500 direct-deposit block (lines 8–10), charging eligible students $12 when they have no deposits. The bank policy makes the student waiver independent.',
+    issue: 'The old COBOL code checks student status inside the $500 direct-deposit block (lines 8–10), charging eligible students $12 when they have no deposits. The policy makes the student waiver independent.',
     cases: [
       { name: 'High balance ($2,000 bal, $0 dep, non-student, 30)', x: [2000, 0, false, 30], old: '$0', expected: '$0' },
       { name: 'Qualifying deposit ($400 bal, $600 dep, non-student, 30)', x: [400, 600, false, 30], old: '$0', expected: '$0' },
@@ -43,7 +43,7 @@ window.bankingPresets = {
       { name: 'Student age 25 ($400 bal, $0 dep, student, 25)', x: [400, 0, true, 25], old: '$12', expected: '$12' },
       { name: 'Negative balance input (-$50 bal, $0 dep)', x: [-50, 0, false, 30], old: '$12 (Bug)', expected: 'Rejected' }
     ],
-    code: `# Updated Python banking logic (verified against bank policy)
+    code: `# Updated Python logic (verified against policy rules)
 def monthly_fee(balance, deposits, student, age):
     if balance < 0 or deposits < 0 or age < 0:
         raise ValueError("Invalid negative input")
@@ -146,7 +146,7 @@ def monthly_fee(balance, deposits, student, age):
       { name: 'Exact $50 cushion boundary ($100 chk, $0 sav, $150 tx)', x: [100, 0, false, 150], old: '$35 (Bug)', expected: '$0' },
       { name: 'Negative transaction amount ($100 chk, $50 sav, -$20 tx)', x: [100, 50, true, -20], old: '$0 (Bug)', expected: 'Rejected' }
     ],
-    code: `# Updated Python overdraft fee logic (verified against bank policy)
+    code: `# Updated Python overdraft fee logic (verified against policy rules)
 def overdraft_fee(checking_bal, savings_bal, opted_in, tx_amount):
     if checking_bal < 0 or savings_bal < 0 or tx_amount < 0:
         raise ValueError("Invalid negative input")
@@ -253,7 +253,7 @@ def overdraft_fee(checking_bal, savings_bal, opted_in, tx_amount):
       { name: 'High-value wire $150,000 (executive hold)', x: [150000, false, 0, 0], old: 'EXEC-HOLD', expected: 'EXEC-HOLD' },
       { name: 'Invalid negative wire (-$5,000)', x: [-5000, false, 0, 0], old: 'APPROVED (Bug)', expected: 'Rejected' }
     ],
-    code: `# Updated Python wire approval logic (verified against bank policy)
+    code: `# Updated Python wire approval logic (verified against policy rules)
 def wire_status(wire_amt, is_intl):
     if wire_amt <= 0:
         raise ValueError("Invalid wire amount")
@@ -355,7 +355,7 @@ def wire_status(wire_amt, is_intl):
       { name: 'Minimum 4.0% APR floor (4.2% promo base, 0 days late, autopay)', x: [4.2, 0, true, 0], old: '3.7% (Bug)', expected: '4.0%' },
       { name: 'Invalid negative days late (8.5% base, -3 days late)', x: [8.5, -3, false, 0], old: '8.5% (Bug)', expected: 'Rejected' }
     ],
-    code: `# Updated Python loan APR calculation (verified against bank policy)
+    code: `# Updated Python loan APR calculation (verified against policy rules)
 def effective_apr(base_apr, days_late, autopay):
     if base_apr < 0 or days_late < 0:
         raise ValueError("Invalid negative input")
