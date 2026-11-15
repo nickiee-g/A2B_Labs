@@ -5,7 +5,7 @@
 
 :root,
 :root[data-theme="dark"] {
-  --bg-lowest: #02090f;
+  --bg-lowest: #05080c;
   --bg-surface: #111520;
   --bg-low: #171c29;
   --bg-mid: #1e2434;
@@ -6116,92 +6116,16 @@ html.ws-sidebar-collapsed .ws-summary-btn-copy {
 }
 
 /* ==========================================================================
-   GLOBAL MESHNET CINEMATIC VIDEO BACKGROUND (DARK & LIGHT MODES)
+   GLOBAL TWO-PLATE PARALLAX PHOTOGRAPHIC BACKGROUND
    ========================================================================== */
 html,
 body {
-  background-color: #02090f;
+  background-color: #05080c;
 }
 
 :root[data-theme="light"] html,
 :root[data-theme="light"] body {
   background-color: #f8fafc;
-}
-
-.ang-meshnet-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-  background: #02090f;
-}
-
-:root[data-theme="light"] .ang-meshnet-bg {
-  background: #f8fafc;
-}
-
-.ang-meshnet-glow {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(56% 46% at 50% 46%, rgba(62, 224, 208, 0.133) 0%, transparent 68%),
-    linear-gradient(180deg, #02090f 0%, #04131f 50%, #02090f 100%);
-}
-
-:root[data-theme="light"] .ang-meshnet-glow {
-  background:
-    radial-gradient(56% 46% at 50% 46%, rgba(13, 148, 136, 0.11) 0%, transparent 68%),
-    linear-gradient(180deg, #f8fafc 0%, #eff6ff 50%, #f8fafc 100%);
-}
-
-.ang-meshnet-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 1;
-  mix-blend-mode: screen;
-  opacity: 0.94;
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .ang-meshnet-video {
-  filter: invert(1) hue-rotate(180deg) saturate(1.18) contrast(1.06);
-  mix-blend-mode: multiply;
-  opacity: 0.76;
-}
-
-.ang-meshnet-grain {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  opacity: 0.04;
-  mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 220px 220px;
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .ang-meshnet-grain {
-  opacity: 0.025;
-  mix-blend-mode: multiply;
-}
-
-.ang-meshnet-vignette {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  box-shadow: inset 0 0 210px 80px rgba(0, 0, 0, 0.82);
-  background: radial-gradient(72% 62% at 50% 46%, rgba(2, 9, 15, 0.22) 0%, rgba(2, 9, 15, 0.48) 100%);
-  pointer-events: none;
-}
-
-:root[data-theme="light"] .ang-meshnet-vignette {
-  box-shadow: inset 0 0 180px 60px rgba(226, 232, 240, 0.72);
-  background: radial-gradient(72% 62% at 50% 46%, rgba(248, 250, 252, 0.26) 0%, rgba(241, 245, 249, 0.42) 100%);
 }
 
 .ang-bench-main,
@@ -6222,8 +6146,7 @@ body {
 .ang-three-wrap,
 .ang-ambient-matrix,
 .ang-hud-scrim,
-.sum-three-bg,
-.app-parallax-bg {
+.sum-three-bg {
   display: none !important;
 }
 
@@ -6260,15 +6183,50 @@ body {
   background: radial-gradient(78% 74% at 48% 48%, rgba(5, 8, 12, 0.34) 0%, rgba(5, 8, 12, 0.56) 100%);
 }
 
-.app-parallax-near {
+.app-parallax-tagline {
+  position: absolute;
+  left: 4vw;
+  bottom: clamp(58px, 9.5vh, 108px);
   z-index: 2;
+  width: min(38vw, 34ch);
+  padding: 28px 34px;
+  margin: -28px -34px;
+  background: radial-gradient(78% 74% at 40% 50%, rgba(5, 8, 12, 0.82) 0%, rgba(5, 8, 12, 0.56) 46%, transparent 80%);
+  pointer-events: none;
+  will-change: translate, opacity;
+}
+
+.app-parallax-tagline-text {
+  margin: 0;
+  max-width: 100%;
+  text-wrap: balance;
+  font-family: 'General Sans', var(--font-sans);
+  font-size: clamp(1.65rem, 3.1vw, 3.15rem);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: rgba(237, 240, 247, 0.92);
+  text-shadow: 0 2px 18px rgba(5, 8, 12, 0.55);
+}
+
+:root[data-theme="light"] .app-parallax-tagline {
+  background: radial-gradient(78% 74% at 40% 50%, rgba(248, 250, 252, 0.86) 0%, rgba(248, 250, 252, 0.58) 46%, transparent 80%);
+}
+
+:root[data-theme="light"] .app-parallax-tagline-text {
+  color: #0f172a;
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.72);
+}
+
+.app-parallax-near {
+  z-index: 3;
   scale: 1.08;
 }
 
 .app-parallax-grain {
   position: absolute;
   inset: -4%;
-  z-index: 3;
+  z-index: 4;
   opacity: 0.045;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -6287,14 +6245,14 @@ body {
 .app-parallax-vignette {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 5;
   background: radial-gradient(ellipse at center, transparent 34%, rgba(0, 0, 0, 0.75) 100%);
 }
 
 .app-parallax-light-veil {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 6;
   opacity: 0;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.28) 0%, rgba(241, 245, 249, 0.22) 55%, rgba(226, 232, 240, 0.34) 100%);
   transition: opacity 0.2s ease;

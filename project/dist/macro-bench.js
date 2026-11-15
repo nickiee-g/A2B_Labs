@@ -1,12 +1,11 @@
 (() => {
-  const VIDEO_SRC = 'https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/meshnet.mp4';
-  const PLAYBACK_RATE = 0.72;
+  const FAR_SRC = 'https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-sky.webp';
+  const NEAR_SRC = 'https://zxdefgavgwfxastwmmjm.supabase.co/storage/v1/object/public/assets/sentry-fg.webp';
 
+  const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   let motionPaused = false;
   try {
-    motionPaused =
-      localStorage.getItem('a2b-motion') === 'paused' ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    motionPaused = localStorage.getItem('a2b-motion') === 'paused' || reduceMotionQuery.matches;
   } catch (_) {}
 
   function syncMotionButtons() {
@@ -16,71 +15,102 @@
     });
   }
 
-  function mountMeshnetBackground() {
+  function mountParallaxBackground() {
     syncMotionButtons();
 
-    // Remove any legacy background wrappers if present
-    document.querySelectorAll('.ang-fluid-bg-wrap, .app-parallax-bg, .ang-meshnet-bg').forEach(el => el.remove());
+    document.querySelectorAll('.ang-meshnet-bg, .ang-fluid-bg-wrap, .app-parallax-bg').forEach(el => el.remove());
 
-    const wrap = document.createElement('div');
-    wrap.className = 'ang-meshnet-bg';
-    wrap.setAttribute('aria-hidden', 'true');
+    const bg = document.createElement('div');
+    bg.className = 'app-parallax-bg';
+    bg.setAttribute('aria-hidden', 'true');
 
-    const glow = document.createElement('div');
-    glow.className = 'ang-meshnet-glow';
+    const isHome = document.body.classList.contains('home-bench-page');
+    const taglineMarkup = isHome
+      ? '<div class="app-parallax-tagline"><p class="app-parallax-tagline-text">See it before it moves.</p></div>'
+      : '';
 
-    const video = document.createElement('video');
-    video.className = 'ang-meshnet-video';
-    video.src = VIDEO_SRC;
-    video.muted = true;
-    video. defaultMuted = true;
-    video.loop = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-    video.setAttribute('muted', '');
-    video.setAttribute('loop', '');
-    video.setAttribute('playsinline', '');
-    video.setAttribute('preload', 'auto');
+    bg.innerHTML = `
+      <img class="app-parallax-plate app-parallax-far" src="${FAR_SRC}" alt="" decoding="async" />
+      <div class="app-parallax-scrim"></div>
+      ${taglineMarkup}
+      <img class="app-parallax-plate app-parallax-near" src="${NEAR_SRC}" alt="" decoding="async" />
+      <div class="app-parallax-grain"></div>
+      <div class="app-parallax-vignette"></div>
+      <div class="app-parallax-light-veil"></div>
+    `;
+    document.body.insertBefore(bg, document.body.firstChild);
 
-    const grain = document.createElement('div');
-    grain.className = 'ang-meshnet-grain';
+    const farEl = bg.querySelector('.app-parallax-far');
+    const nearEl = bg.querySelector('.app-parallax-near');
+    const typeEl = bg.querySelector('.app-parallax-tagline');
 
-    const vignette = document.createElement('div');
-    vignette.className = 'ang-meshnet-vignette';
+    let targetPx = 0;
+    let targetPy = 0;
+    let curPx = 0;
+    let curPy = 0;
+    let rafId = 0;
 
-    wrap.appendChild(glow);
-    wrap.appendChild(video);
-    wrap.appendChild(grain);
-    wrap.appendChild(vignette);
-    document.body.insertBefore(wrap, document.body.firstChild);
+    function applyFrame() {
+      rafId = 0;
+      bg.classList.toggle('is-motion-paused', motionPaused);
 
-    function applyPlaybackState() {
-      video.playbackRate = PLAYBACK_RATE;
+      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const p = maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0;
+
       if (motionPaused) {
-        try {
-          video.pause();
-        } catch (_) {}
-      } else {
-        const p = video.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch(() => {});
+        farEl.style.translate = '0px 0px';
+        farEl.style.scale = '1.10';
+        nearEl.style.translate = '0px 0px';
+        nearEl.style.scale = '1.08';
+        if (typeEl) {
+          typeEl.style.translate = '0px 0px';
+          typeEl.style.opacity = '1';
         }
+        return;
+      }
+
+      curPx += (targetPx - curPx) * 0.08;
+      curPy += (targetPy - curPy) * 0.08;
+
+      const farX = (curPx * -10).toFixed(2);
+      const farY = (p * -60 + curPy * -4).toFixed(2);
+      const farScale = (1.10 - p * 0.04).toFixed(4);
+
+      const nearX = (curPx * 22).toFixed(2);
+      const nearY = (p * 120 + curPy * 8).toFixed(2);
+      const nearScale = (1.08 + p * 0.06).toFixed(4);
+
+      farEl.style.translate = `${farX}px ${farY}px`;
+      farEl.style.scale = farScale;
+      nearEl.style.translate = `${nearX}px ${nearY}px`;
+      nearEl.style.scale = nearScale;
+
+      if (typeEl) {
+        const typeX = (curPx * -16).toFixed(2);
+        const typeY = (p * -180 + curPy * -6).toFixed(2);
+        const typeOpacity = Math.max(0.05, 1 - (Math.min(0.62, p) / 0.62) * 0.95).toFixed(3);
+        typeEl.style.translate = `${typeX}px ${typeY}px`;
+        typeEl.style.opacity = typeOpacity;
+      }
+
+      if (Math.abs(targetPx - curPx) > 0.002 || Math.abs(targetPy - curPy) > 0.002) {
+        rafId = requestAnimationFrame(applyFrame);
       }
     }
 
-    video.addEventListener('loadedmetadata', () => {
-      video.playbackRate = PLAYBACK_RATE;
-    });
+    function scheduleFrame() {
+      if (!rafId) rafId = requestAnimationFrame(applyFrame);
+    }
 
-    video.addEventListener('canplay', () => {
-      applyPlaybackState();
-    });
+    window.addEventListener('pointermove', e => {
+      if (motionPaused) return;
+      targetPx = (e.clientX / Math.max(1, window.innerWidth) - 0.5) * 2;
+      targetPy = (e.clientY / Math.max(1, window.innerHeight) - 0.5) * 2;
+      scheduleFrame();
+    }, { passive: true });
 
-    window.addEventListener('load', () => {
-      applyPlaybackState();
-    });
-
-    applyPlaybackState();
+    window.addEventListener('scroll', scheduleFrame, { passive: true });
+    window.addEventListener('resize', scheduleFrame, { passive: true });
 
     document.querySelectorAll('[data-motion-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -89,29 +119,30 @@
           localStorage.setItem('a2b-motion', motionPaused ? 'paused' : 'running');
         } catch (_) {}
         syncMotionButtons();
-        applyPlaybackState();
+        scheduleFrame();
       });
     });
 
-    const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (reduceMotionQuery.addEventListener) {
       reduceMotionQuery.addEventListener('change', e => {
-        let hasExplicitPref = false;
+        let hasExplicit = false;
         try {
-          hasExplicitPref = Boolean(localStorage.getItem('a2b-motion'));
+          hasExplicit = Boolean(localStorage.getItem('a2b-motion'));
         } catch (_) {}
-        if (!hasExplicitPref) {
+        if (!hasExplicit) {
           motionPaused = e.matches;
           syncMotionButtons();
-          applyPlaybackState();
+          scheduleFrame();
         }
       });
     }
+
+    applyFrame();
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountMeshnetBackground);
+    document.addEventListener('DOMContentLoaded', mountParallaxBackground);
   } else {
-    mountMeshnetBackground();
+    mountParallaxBackground();
   }
 })();
