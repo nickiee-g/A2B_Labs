@@ -6748,11 +6748,46 @@ body.sum-centered-page {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: filter 0.14s ease;
+  transition: filter 0.14s ease, transform 0.14s ease;
 }
 
 .sum-inline-approve-btn:hover {
   filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.sum-inline-unapprove-btn {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.40);
+  background: rgba(220, 38, 38, 0.14);
+  color: #fca5a5;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.sum-inline-unapprove-btn:hover {
+  background: rgba(220, 38, 38, 0.26);
+  border-color: #f87171;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+:root[data-theme="light"] .sum-inline-unapprove-btn {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
+}
+
+:root[data-theme="light"] .sum-inline-unapprove-btn:hover {
+  background: rgba(220, 38, 38, 0.16);
+  color: #991b1b;
 }
 
 /* Feature Description Body (What It Did Before / What It Does Now / Why It's Better) */

@@ -3960,11 +3960,21 @@ function renderSummaryPage() {
                       <span class="sum-status-badge ${item.approved ? 'is-approved' : 'is-pending'}">
                         ${item.approved ? '✓ Ready to Download' : 'Needs Approval'}
                       </span>
-                      ${!item.approved ? `
+                      ${item.approved ? `
+                        <button
+                          type="button"
+                          class="sum-inline-unapprove-btn"
+                          data-summary-unapprove-file="${esc(item.id)}"
+                          title="Unapprove ${esc(item.name)} and return to review"
+                          aria-label="Unapprove ${esc(item.name)}"
+                        >
+                          ↺ Unapprove
+                        </button>
+                      ` : `
                         <button type="button" class="sum-inline-approve-btn" data-summary-approve-file="${esc(item.id)}">
                           ✓ Approve
                         </button>
-                      ` : ''}
+                      `}
                     </div>
                   </div>
 
@@ -4599,6 +4609,18 @@ function bindSummaryEvents() {
       target.approved = true;
       ensureQueueItemChecks(target);
       notice = `Approved "${target.name}" for .zip export.`;
+      saveQueueToStorage();
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-summary-unapprove-file]').forEach(btn => {
+    btn.onclick = () => {
+      const fId = btn.dataset.summaryUnapproveFile;
+      const target = fileQueue.find(f => f.id === fId);
+      if (!target) return;
+      target.approved = false;
+      notice = `Unapproved "${target.name}". You can make further edits in Workspace.`;
       saveQueueToStorage();
       render();
     };
